@@ -7,6 +7,8 @@ const selectionText = document.getElementById('selection-text');
 const explainButton = document.getElementById('explain-button');
 const translateButton = document.getElementById('translate-button');
 
+let currentAssistantMessage = null;
+
 // Handle user input
 function handleUserInput(text) {
     // Add user message to chat
@@ -65,7 +67,17 @@ window.addEventListener('message', (event) => {
     const message = event.data;
     if (message.type === 'OLLAMA_RESPONSE') {
         if (message.success) {
-            addMessage('assistant', message.response);
+            if (!currentAssistantMessage) {
+                currentAssistantMessage = document.createElement('div');
+                currentAssistantMessage.className = 'message assistant-message';
+                chatMessages.appendChild(currentAssistantMessage);
+            }
+            currentAssistantMessage.textContent = message.response;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            if (message.done) {
+                currentAssistantMessage = null;
+            }
         } else {
             addMessage('assistant', `Error: ${message.error}`);
         }

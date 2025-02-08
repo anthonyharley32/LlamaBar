@@ -60,12 +60,14 @@ chrome.runtime.onConnect.addListener((port) => {
     port.onMessage.addListener(async (message) => {
         if (message.type === 'QUERY_OLLAMA') {
             try {
-                const response = await handleOllamaQuery(message.prompt);
-                port.postMessage({ 
-                    type: 'OLLAMA_RESPONSE',
-                    success: true,
-                    response: response 
-                });
+                const response = await handleOllamaQuery(message.prompt, port);
+                if (!response.success) {
+                    port.postMessage({ 
+                        type: 'OLLAMA_RESPONSE',
+                        success: false,
+                        error: response.error 
+                    });
+                }
             } catch (error) {
                 port.postMessage({ 
                     type: 'OLLAMA_RESPONSE',
@@ -84,7 +86,7 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 // Function to communicate with Ollama
-async function handleOllamaQuery(prompt) {
+async function handleOllamaQuery(prompt, port) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -107,7 +109,7 @@ async function handleOllamaQuery(prompt) {
             body: JSON.stringify({
                 model: 'llama3.2:1b',
                 prompt: prompt,
-                stream: false,
+                stream: true,
                 options: {
                     temperature: 0.7,
                     top_k: 50,
@@ -122,20 +124,51 @@ async function handleOllamaQuery(prompt) {
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Ollama error response:', errorText);
-            throw new Error(`Ollama error: ${response.status} ${response.statusText}`);
+            return {
+                success: false,
+                error: `Ollama error: ${response.status} ${response.statusText}`
+            };
         }
 
-        const data = await response.json();
-        console.log('Received response:', data);
-        
-        if (!data.response) {
-            throw new Error('Invalid response from Ollama');
+        let fullResponse = '';
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const {value, done} = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.trim() === '') continue;
+                
+                try {
+                    const data = JSON.parse(line);
+                    if (data.response) {
+                        fullResponse += data.response;
+                        // Stream each chunk to the UI
+                        port.postMessage({
+                            type: 'OLLAMA_RESPONSE',
+                            success: true,
+                            response: fullResponse,
+                            done: data.done
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error parsing JSON:', e);
+                }
+            }
         }
 
-        return data.response;
+        return { success: true };
     } catch (error) {
         console.error('Ollama query error:', error);
-        throw new Error(error.message || 'Failed to communicate with Ollama');
+        return {
+            success: false,
+            error: error.message || 'Failed to communicate with Ollama'
+        };
     } finally {
         clearTimeout(timeoutId);
     }
