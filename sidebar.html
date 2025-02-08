@@ -1,49 +1,51 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
     <title>Local AI Assistant</title>
-    <link rel="stylesheet" href="/styles/sidebar.css">
+    <link rel="stylesheet" href="styles/sidebar.css">
 </head>
 <body>
-    <div class="sidebar-container" role="complementary" aria-label="AI Assistant Sidebar">
-        <div class="sidebar-header">
-            <h1 id="sidebar-title">Local AI Assistant</h1>
-            <div class="model-info" aria-label="Model Information">
-                <span class="model-badge" role="status">Ollama</span>
+    <div class="sidebar-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="model-badge">
+                <span>Ollama</span>
+            </div>
+            <div class="header-actions">
+                <button class="icon-button" id="close-button">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
             </div>
         </div>
 
-        <div class="chat-container">
-            <div id="chat-messages" class="chat-messages" role="log" aria-label="Chat Messages">
-                <!-- Messages will be inserted here -->
+        <!-- Chat Container -->
+        <div class="chat-container" id="chat-messages">
+            <!-- Initial Message -->
+            <div class="message assistant-message">
+                <h2>Hi,</h2>
+                <p>How can I assist you today?</p>
             </div>
+        </div>
 
-            <div class="selection-popup" id="selection-popup" style="display: none;" role="dialog" aria-labelledby="selection-text">
-                <div class="selection-text" id="selection-text"></div>
-                <div class="selection-actions" role="group" aria-label="Text Actions">
-                    <button class="action-button" id="explain-button" aria-label="Explain selected text">Explain</button>
-                    <button class="action-button" id="translate-button" aria-label="Translate selected text">Translate</button>
-                    <button class="action-button" id="more-button" aria-label="More options">•••</button>
-                </div>
-            </div>
-
-            <div class="input-container">
+        <!-- Input Area -->
+        <div class="input-container">
+            <div class="input-wrapper">
                 <textarea 
                     id="user-input" 
                     placeholder="Type a message..." 
                     rows="1"
-                    class="chat-input"
-                    aria-label="Message input"
+                    autofocus
                 ></textarea>
-                <button id="send-button" class="send-button" aria-label="Send message">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                        <path d="M22 2L11 13M22 2L15 22L11 13M11 13L2 9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <button id="send-button" class="send-button">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
             </div>
         </div>
     </div>
-    <script src="/sidebar.js"></script>
+    <script src="sidebar.js"></script>
 </body>
 </html> 
