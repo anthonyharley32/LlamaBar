@@ -6,7 +6,6 @@ const selectionPopup = document.getElementById('selection-popup');
 const selectionText = document.getElementById('selection-text');
 const explainButton = document.getElementById('explain-button');
 const translateButton = document.getElementById('translate-button');
-const closeButton = document.getElementById('close-button');
 
 let currentAssistantMessage = null;
 
@@ -115,9 +114,4 @@ document.addEventListener('click', (e) => {
     if (!selectionPopup.contains(e.target)) {
         selectionPopup.style.display = 'none';
     }
-});
-
-// Add close button functionality
-closeButton.addEventListener('click', () => {
-    window.close();
 }); 
