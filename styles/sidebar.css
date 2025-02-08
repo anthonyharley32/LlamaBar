@@ -111,6 +111,9 @@ body {
     border-radius: 12px;
     font-size: 14px;
     line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .user-message {
@@ -133,6 +136,11 @@ body {
     font-weight: 600;
 }
 
+.assistant-message p {
+    margin: 0;
+    padding: 0;
+}
+
 /* Input Area */
 .input-container {
     padding: 16px;
@@ -140,23 +148,46 @@ body {
     background: var(--background-color);
 }
 
+.explain-button-container {
+    margin-bottom: 12px;
+}
+
+.explain-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    background: #f8f9fa;
+    border: none;
+    border-radius: 20px;
+    color: var(--text-color);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.explain-button:hover {
+    background: #f1f3f5;
+}
+
 .input-wrapper {
     display: flex;
     flex-direction: column;
-    background: var(--message-bg);
-    border-radius: 12px;
-    padding: 8px 12px;
+    background: #f8f9fa;
+    border-radius: 16px;
+    padding: 12px 16px;
 }
 
 .input-controls {
     display: flex;
     align-items: flex-end;
-    gap: 8px;
+    gap: 12px;
 }
 
 textarea {
     width: 100%;
-    min-height: 24px;
+    min-height: 44px;
     max-height: 200px;
     border: none;
     background: none;

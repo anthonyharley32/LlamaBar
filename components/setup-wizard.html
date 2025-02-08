@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Setup Wizard - Local AI Assistant</title>
+    <style>
+        .wizard-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        
+        .step {
+            display: none;
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            background: #f5f5f5;
+        }
+        
+        .step.active {
+            display: block;
+        }
+        
+        .step-title {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .step-content {
+            margin-bottom: 15px;
+        }
+        
+        .instructions {
+            background: #fff;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        
+        .step-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .status-indicator::before {
+            content: '';
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-indicator.success::before {
+            background: #28a745;
+        }
+        
+        .status-indicator.error::before {
+            background: #dc3545;
+        }
+        
+        .status-indicator.pending::before {
+            background: #ffc107;
+        }
+
+        .download-link {
+            color: #007bff;
+            text-decoration: none;
+            display: inline-block;
+            margin: 10px 0;
+        }
+
+        .download-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="wizard-container">
+        <div id="step1" class="step active">
+            <div class="step-title">Welcome to Local AI Assistant</div>
+            <div class="step-content">
+                <p>Let's get you set up with Ollama.</p>
+                <div id="ollamaStatus" class="status-indicator pending">
+                    Checking Ollama installation...
+                </div>
+                <div id="ollamaInstructions" style="display: none;">
+                    <p>1. First, download and install Ollama:</p>
+                    <a href="https://ollama.ai" target="_blank" class="download-link">Download Ollama</a>
+                    
+                    <p>2. Then, start the Ollama server:</p>
+                    <div class="instructions" id="startInstructions"></div>
+                    
+                    <p>3. Click "Check Again" after starting the server</p>
+                </div>
+            </div>
+            <div class="step-actions">
+                <button id="checkOllama">Check Again</button>
+                <button id="nextStep1" disabled>Next</button>
+            </div>
+        </div>
+
+        <div id="step2" class="step">
+            <div class="step-title">Install Required Model</div>
+            <div class="step-content">
+                <p>We need to install the default model (llama3.2:1b).</p>
+                <div id="modelStatus" class="status-indicator pending">
+                    Checking model availability...
+                </div>
+            </div>
+            <div class="step-actions">
+                <button id="prevStep2">Previous</button>
+                <button id="installModel">Install Model</button>
+                <button id="nextStep2" disabled>Next</button>
+            </div>
+        </div>
+
+        <div id="step3" class="step">
+            <div class="step-title">Setup Complete!</div>
+            <div class="step-content">
+                <p>Everything is set up and ready to go.</p>
+                <p>You can now close this wizard and start using the Local AI Assistant.</p>
+            </div>
+            <div class="step-actions">
+                <button id="prevStep3">Previous</button>
+                <button id="finish">Finish</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { checkOllamaInstallation, checkRequiredModel, getOllamaStartInstructions } from '../utils/setup-checker.js';
+
+        let currentStep = 1;
+        
+        // Step navigation
+        function showStep(step) {
+            document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+            document.getElementById(`step${step}`).classList.add('active');
+            currentStep = step;
+        }
+
+        // Show/hide Ollama instructions
+        function toggleOllamaInstructions(show) {
+            const instructions = document.getElementById('ollamaInstructions');
+            instructions.style.display = show ? 'block' : 'none';
+            if (show) {
+                document.getElementById('startInstructions').textContent = getOllamaStartInstructions();
+            }
+        }
+
+        // Event listeners
+        document.getElementById('checkOllama').addEventListener('click', async () => {
+            const status = await checkOllamaInstallation();
+            const statusEl = document.getElementById('ollamaStatus');
+            
+            if (status.installed) {
+                statusEl.className = 'status-indicator success';
+                statusEl.textContent = `Ollama ${status.version} is installed and running`;
+                document.getElementById('nextStep1').disabled = false;
+                toggleOllamaInstructions(false);
+            } else {
+                statusEl.className = 'status-indicator error';
+                statusEl.textContent = status.error;
+                toggleOllamaInstructions(true);
+            }
+        });
+
+        document.getElementById('installModel').addEventListener('click', async () => {
+            const statusEl = document.getElementById('modelStatus');
+            statusEl.className = 'status-indicator pending';
+            statusEl.textContent = 'Installing model...';
+            
+            try {
+                const response = await fetch('http://localhost:11434/api/pull', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'llama3.2:1b' })
+                });
+                
+                if (response.ok) {
+                    statusEl.className = 'status-indicator success';
+                    statusEl.textContent = 'Model installed successfully';
+                    document.getElementById('nextStep2').disabled = false;
+                } else {
+                    throw new Error('Failed to install model');
+                }
+            } catch (error) {
+                statusEl.className = 'status-indicator error';
+                statusEl.textContent = 'Failed to install model: ' + error.message;
+            }
+        });
+
+        // Navigation buttons
+        document.getElementById('nextStep1').addEventListener('click', () => showStep(2));
+        document.getElementById('prevStep2').addEventListener('click', () => showStep(1));
+        document.getElementById('nextStep2').addEventListener('click', () => showStep(3));
+        document.getElementById('prevStep3').addEventListener('click', () => showStep(2));
+        document.getElementById('finish').addEventListener('click', () => {
+            // Close the wizard and notify the parent
+            window.parent.postMessage({ type: 'SETUP_COMPLETE' }, '*');
+        });
+
+        // Initial check
+        window.addEventListener('load', async () => {
+            const status = await checkOllamaInstallation();
+            const statusEl = document.getElementById('ollamaStatus');
+            
+            if (status.installed) {
+                statusEl.className = 'status-indicator success';
+                statusEl.textContent = `Ollama ${status.version} is installed and running`;
+                document.getElementById('nextStep1').disabled = false;
+                toggleOllamaInstructions(false);
+            } else {
+                statusEl.className = 'status-indicator error';
+                statusEl.textContent = status.error;
+                toggleOllamaInstructions(true);
+            }
+        });
+    </script>
+</body>
+</html> 

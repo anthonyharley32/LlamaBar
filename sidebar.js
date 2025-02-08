@@ -8,10 +8,74 @@ const explainButton = document.getElementById('explain-button');
 const translateButton = document.getElementById('translate-button');
 const modelSelector = document.getElementById('model-selector');
 const imagePreview = document.getElementById('image-preview');
+const explainButtonContainer = document.getElementById('explain-button-container');
+const inputExplainButton = document.getElementById('input-explain-button');
 
 let currentAssistantMessage = null;
 let currentModel = 'llama3.2:1b';
 let currentImage = null;
+let setupWizardFrame = null;
+
+// Check setup status
+async function checkSetupStatus() {
+    try {
+        const response = await fetch('http://localhost:11434/api/version');
+        if (!response.ok) {
+            showSetupWizard();
+            return false;
+        }
+        
+        // Check if required model is available
+        const modelResponse = await fetch('http://localhost:11434/api/tags');
+        if (!modelResponse.ok) {
+            showSetupWizard();
+            return false;
+        }
+        
+        const data = await modelResponse.json();
+        if (!data.models.some(model => model.name === currentModel)) {
+            showSetupWizard();
+            return false;
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Setup check failed:', error);
+        showSetupWizard();
+        return false;
+    }
+}
+
+// Show setup wizard
+function showSetupWizard() {
+    if (setupWizardFrame) return;
+    
+    setupWizardFrame = document.createElement('iframe');
+    setupWizardFrame.src = chrome.runtime.getURL('components/setup-wizard.html');
+    setupWizardFrame.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: white;
+        z-index: 1000;
+    `;
+    document.body.appendChild(setupWizardFrame);
+}
+
+// Listen for setup completion
+window.addEventListener('message', (event) => {
+    if (event.data.type === 'SETUP_COMPLETE') {
+        if (setupWizardFrame) {
+            setupWizardFrame.remove();
+            setupWizardFrame = null;
+            // Reinitialize after setup
+            initializeModelSelector();
+        }
+    }
+});
 
 // Initialize model selector
 async function initializeModelSelector() {
@@ -38,6 +102,8 @@ async function initializeModelSelector() {
     } catch (error) {
         console.error('Error loading models:', error);
         modelSelector.innerHTML = '<option value="error">Error loading models</option>';
+        // Show setup wizard if there's an error
+        showSetupWizard();
     }
 }
 
@@ -86,6 +152,29 @@ window.removeImage = function() {
     currentImage = null;
 }
 
+// Add message to chat
+function addMessage(type, content) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${type}-message`;
+    
+    if (type === 'assistant' && !content) {
+        // For streaming messages, start with an empty paragraph
+        const p = document.createElement('p');
+        messageDiv.appendChild(p);
+    } else {
+        messageDiv.innerHTML = content;
+    }
+    
+    chatMessages.appendChild(messageDiv);
+    
+    // Smooth scroll to bottom
+    requestAnimationFrame(() => {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
+    
+    return messageDiv;
+}
+
 // Handle user input
 function handleUserInput(text) {
     // Create message content
@@ -98,8 +187,8 @@ function handleUserInput(text) {
     // Add user message to chat
     addMessage('user', messageContent);
     
-    // Reset currentAssistantMessage to ensure a new response element is created
-    currentAssistantMessage = null;
+    // Create a new assistant message div that will be updated with streaming content
+    currentAssistantMessage = addMessage('assistant', '');
     
     // Check if current model supports vision
     const isVisionModel = currentModel.toLowerCase().includes('vision') || 
@@ -141,15 +230,6 @@ function handleUserInput(text) {
     }
 }
 
-// Add message to chat
-function addMessage(type, content) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${type}-message`;
-    messageDiv.innerHTML = content;
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
 // Auto-resize textarea
 function autoResizeTextarea() {
     // Reset height to auto to get the correct scrollHeight
@@ -189,13 +269,26 @@ userInput.addEventListener('keypress', (e) => {
 chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'OLLAMA_RESPONSE') {
         if (message.success) {
-            if (!currentAssistantMessage) {
-                currentAssistantMessage = document.createElement('div');
-                currentAssistantMessage.className = 'message assistant-message';
-                chatMessages.appendChild(currentAssistantMessage);
+            if (currentAssistantMessage) {
+                // Get the previous response length
+                const prevResponse = currentAssistantMessage.textContent;
+                const newResponse = message.response;
+                
+                // Only append the new content
+                if (newResponse.length > prevResponse.length) {
+                    const newContent = newResponse.slice(prevResponse.length);
+                    const textNode = document.createTextNode(newContent);
+                    currentAssistantMessage.appendChild(textNode);
+                    
+                    // Smooth scroll to bottom without causing reflow
+                    requestAnimationFrame(() => {
+                        const shouldScroll = chatMessages.scrollTop + chatMessages.clientHeight >= chatMessages.scrollHeight - 10;
+                        if (shouldScroll) {
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        }
+                    });
+                }
             }
-            currentAssistantMessage.textContent = message.response;
-            chatMessages.scrollTop = chatMessages.scrollHeight;
             
             if (message.done) {
                 currentAssistantMessage = null;
@@ -236,5 +329,49 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// Initialize the model selector when the sidebar loads
-initializeModelSelector(); 
+// Handle input changes for explain button visibility
+userInput.addEventListener('input', () => {
+    const text = userInput.value.trim();
+    explainButtonContainer.style.display = text ? 'block' : 'none';
+    autoResizeTextarea();
+});
+
+// Handle explain button click
+inputExplainButton.addEventListener('click', () => {
+    const text = userInput.value.trim();
+    if (text) {
+        const systemPrompt = `You are an expert educator and communicator. Your task is to:
+1. Break down the concept or text in simple terms
+2. Provide relevant examples or analogies
+3. Highlight key points or terminology
+4. Explain any underlying principles or context
+5. Address potential misconceptions
+6. Conclude with practical takeaways
+
+Remember to be clear, engaging, and thorough while maintaining accessibility for learners at any level.
+
+Text to explain: "${text}"
+
+Let's break this down:`;
+
+        handleUserInput(text);
+        // Send the system prompt separately
+        chrome.runtime.sendMessage({
+            type: 'QUERY_OLLAMA',
+            prompt: systemPrompt,
+            model: currentModel
+        });
+        
+        userInput.value = '';
+        explainButtonContainer.style.display = 'none';
+        autoResizeTextarea();
+    }
+});
+
+// Initial setup check
+window.addEventListener('load', async () => {
+    const isSetup = await checkSetupStatus();
+    if (isSetup) {
+        initializeModelSelector();
+    }
+}); 

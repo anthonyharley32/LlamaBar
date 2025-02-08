@@ -29,7 +29,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "styles/*"
+        "styles/*",
+        "components/*",
+        "utils/*"
       ],
       "matches": ["<all_urls>"]
     }

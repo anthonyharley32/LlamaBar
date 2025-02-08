@@ -2,6 +2,7 @@
 let isSidebarVisible = false;
 let connections = new Map();
 let injectedTabs = new Set();
+let ollamaProcess = null;
 
 // Connection management
 function createConnection(tabId) {
@@ -15,12 +16,64 @@ function createConnection(tabId) {
     return connections.get(tabId);
 }
 
+// Ollama lifecycle management
+async function startOllamaServer() {
+    try {
+        const response = await fetch('http://localhost:11434/api/version');
+        if (response.ok) {
+            console.log('Ollama is already running');
+            return true;
+        }
+    } catch (error) {
+        console.log('Ollama is not running, attempting to start...');
+    }
+
+    try {
+        // Use native messaging to start Ollama
+        chrome.runtime.sendNativeMessage('com.ollama.native', {
+            command: 'start_server',
+            args: 'OLLAMA_ORIGINS="chrome-extension://*" ollama serve'
+        }, response => {
+            if (chrome.runtime.lastError) {
+                console.error('Failed to start Ollama:', chrome.runtime.lastError);
+                return false;
+            }
+            return response.success;
+        });
+        
+        // Wait for server to start
+        let attempts = 0;
+        while (attempts < 10) {
+            try {
+                const response = await fetch('http://localhost:11434/api/version');
+                if (response.ok) {
+                    console.log('Ollama server started successfully');
+                    return true;
+                }
+            } catch (error) {
+                // Server not ready yet
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            attempts++;
+        }
+        
+        console.error('Timeout waiting for Ollama server to start');
+        return false;
+    } catch (error) {
+        console.error('Error starting Ollama server:', error);
+        return false;
+    }
+}
+
 // Handle extension icon click
 chrome.action.onClicked.addListener(async (tab) => {
     if (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:')) {
         console.warn('Cannot inject scripts into browser system pages');
         return;
     }
+
+    // Start Ollama server if not running
+    await startOllamaServer();
 
     try {
         // Only inject if not already injected
@@ -38,7 +91,18 @@ chrome.action.onClicked.addListener(async (tab) => {
             show: isSidebarVisible
         });
     } catch (error) {
-        console.error('Failed to inject content script:', error);
+        console.error('Error toggling sidebar:', error);
+    }
+});
+
+// Clean up when all windows are closed
+chrome.windows.onRemoved.addListener(async () => {
+    const windows = await chrome.windows.getAll();
+    if (windows.length === 0) {
+        // Last window closed, clean up Ollama
+        chrome.runtime.sendNativeMessage('com.ollama.native', {
+            command: 'stop_server'
+        });
     }
 });
 
@@ -59,9 +123,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.runtime.onConnect.addListener((port) => {
     const tabId = port.sender.tab.id;
     const connection = createConnection(tabId);
-    connection.port = port;
     connection.isActive = true;
-
     console.log('Connection established with tab:', tabId);
 
     port.onMessage.addListener(async (message) => {
@@ -69,26 +131,29 @@ chrome.runtime.onConnect.addListener((port) => {
             try {
                 const response = await handleOllamaQuery(message.prompt, message.model);
                 if (!response.success) {
-                    port.postMessage({ 
+                    port.postMessage({
                         type: 'OLLAMA_RESPONSE',
                         success: false,
-                        error: response.error 
+                        error: response.error
                     });
                 }
             } catch (error) {
-                port.postMessage({ 
+                console.error('Error handling Ollama query:', error);
+                port.postMessage({
                     type: 'OLLAMA_RESPONSE',
                     success: false,
-                    error: error.message 
+                    error: error.message
                 });
             }
         }
     });
 
     port.onDisconnect.addListener(() => {
-        console.log('Connection closed with tab:', tabId);
-        connection.isActive = false;
-        connection.port = null;
+        const connection = connections.get(tabId);
+        if (connection) {
+            connection.isActive = false;
+            connection.port = null;
+        }
     });
 });
 
@@ -122,6 +187,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
+// Update the API endpoint to use standard port
+const OLLAMA_API = 'http://localhost:11434';
+
 // Function to communicate with Ollama
 async function handleOllamaQuery(prompt, model = 'llama3.2:1b') {
     const controller = new AbortController();
@@ -130,13 +198,13 @@ async function handleOllamaQuery(prompt, model = 'llama3.2:1b') {
     try {
         // First check if Ollama is running
         try {
-            const healthCheck = await fetch('http://localhost:11434/api/tags');
+            const healthCheck = await fetch(`${OLLAMA_API}/api/tags`);
             if (!healthCheck.ok) {
                 throw new Error('Ollama is not running or not accessible');
             }
         } catch (error) {
             console.error('Ollama connection error:', error);
-            throw new Error('Cannot connect to Ollama. Please ensure it is running on port 11434');
+            throw new Error('Cannot connect to Ollama. Please ensure it is running.');
         }
 
         // Determine if this is a vision-capable model
@@ -246,7 +314,7 @@ async function handleOllamaQuery(prompt, model = 'llama3.2:1b') {
             requestType: isVisionModel ? 'vision' : 'text'
         });
 
-        const response = await fetch('http://localhost:11434/api/generate', {
+        const response = await fetch(`${OLLAMA_API}/api/generate`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
