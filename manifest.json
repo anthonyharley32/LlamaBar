@@ -6,7 +6,7 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "tabs"
+    "sidePanel"
   ],
   "host_permissions": [
     "http://localhost:11434/*"
@@ -23,19 +23,12 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "content_scripts": [
-    {
-      "matches": ["http://*/*", "https://*/*"],
-      "css": ["styles/sidebar.css"],
-      "js": ["content.js"],
-      "run_at": "document_end"
-    }
-  ],
+  "side_panel": {
+    "default_path": "sidebar.html"
+  },
   "web_accessible_resources": [
     {
       "resources": [
-        "sidebar.html",
-        "sidebar.js",
         "styles/*"
       ],
       "matches": ["<all_urls>"]

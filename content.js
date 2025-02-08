@@ -104,6 +104,11 @@ if (!window.ollamaAssistantInitialized) {
         }
         if (sidebarFrame) {
             sidebarFrame.style.right = show ? '0' : '-400px';
+            // Notify background script of sidebar state change
+            chrome.runtime.sendMessage({
+                type: 'SIDEBAR_STATE_CHANGED',
+                isVisible: show
+            });
         }
     }
 
@@ -111,6 +116,26 @@ if (!window.ollamaAssistantInitialized) {
     window.addEventListener('message', (event) => {
         // Verify message origin
         if (event.source !== sidebarFrame?.contentWindow) {
+            return;
+        }
+
+        // Handle close sidebar message
+        if (event.data.type === 'CLOSE_SIDEBAR') {
+            if (sidebarFrame) {
+                sidebarFrame.style.right = '-400px';
+                // Wait for transition to complete before removing
+                setTimeout(() => {
+                    if (sidebarFrame && sidebarFrame.parentNode) {
+                        sidebarFrame.parentNode.removeChild(sidebarFrame);
+                        sidebarFrame = null;
+                    }
+                }, 300); // Match the transition duration from CSS
+            }
+            // Notify background script
+            chrome.runtime.sendMessage({
+                type: 'SIDEBAR_STATE_CHANGED',
+                isVisible: false
+            });
             return;
         }
 

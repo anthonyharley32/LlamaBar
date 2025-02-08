@@ -6,6 +6,7 @@ const selectionPopup = document.getElementById('selection-popup');
 const selectionText = document.getElementById('selection-text');
 const explainButton = document.getElementById('explain-button');
 const translateButton = document.getElementById('translate-button');
+const closeButton = document.getElementById('close-button');
 
 let currentAssistantMessage = null;
 
@@ -14,11 +15,14 @@ function handleUserInput(text) {
     // Add user message to chat
     addMessage('user', text);
     
-    // Send message through window message passing
-    window.parent.postMessage({
+    // Reset currentAssistantMessage to ensure a new response element is created
+    currentAssistantMessage = null;
+    
+    // Send message to background script
+    chrome.runtime.sendMessage({
         type: 'QUERY_OLLAMA',
         prompt: text
-    }, '*');
+    });
 }
 
 // Add message to chat
@@ -62,9 +66,8 @@ userInput.addEventListener('keypress', (e) => {
 
 userInput.addEventListener('input', autoResizeTextarea);
 
-// Listen for messages from the content script
-window.addEventListener('message', (event) => {
-    const message = event.data;
+// Listen for messages from the background script
+chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'OLLAMA_RESPONSE') {
         if (message.success) {
             if (!currentAssistantMessage) {
@@ -112,4 +115,9 @@ document.addEventListener('click', (e) => {
     if (!selectionPopup.contains(e.target)) {
         selectionPopup.style.display = 'none';
     }
+});
+
+// Add close button functionality
+closeButton.addEventListener('click', () => {
+    window.close();
 }); 

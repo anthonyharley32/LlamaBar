@@ -48,6 +48,13 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     connections.delete(tabId);
 });
 
+// Handle messages from content scripts
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'SIDEBAR_STATE_CHANGED') {
+        isSidebarVisible = message.isVisible;
+    }
+});
+
 // Handle long-lived connections
 chrome.runtime.onConnect.addListener((port) => {
     const tabId = port.sender.tab.id;
@@ -60,7 +67,7 @@ chrome.runtime.onConnect.addListener((port) => {
     port.onMessage.addListener(async (message) => {
         if (message.type === 'QUERY_OLLAMA') {
             try {
-                const response = await handleOllamaQuery(message.prompt, port);
+                const response = await handleOllamaQuery(message.prompt, tabId);
                 if (!response.success) {
                     port.postMessage({ 
                         type: 'OLLAMA_RESPONSE',
@@ -85,8 +92,38 @@ chrome.runtime.onConnect.addListener((port) => {
     });
 });
 
+// Initialize side panel behavior
+chrome.runtime.onInstalled.addListener(() => {
+    // Set the side panel to open when the action button is clicked
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+});
+
+// Handle messages from the side panel
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'QUERY_OLLAMA') {
+        handleOllamaQuery(message.prompt)
+            .then(response => {
+                if (!response.success) {
+                    chrome.runtime.sendMessage({
+                        type: 'OLLAMA_RESPONSE',
+                        success: false,
+                        error: response.error
+                    });
+                }
+            })
+            .catch(error => {
+                chrome.runtime.sendMessage({
+                    type: 'OLLAMA_RESPONSE',
+                    success: false,
+                    error: error.message
+                });
+            });
+        return true; // Will respond asynchronously
+    }
+});
+
 // Function to communicate with Ollama
-async function handleOllamaQuery(prompt, port) {
+async function handleOllamaQuery(prompt) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -149,7 +186,7 @@ async function handleOllamaQuery(prompt, port) {
                     if (data.response) {
                         fullResponse += data.response;
                         // Stream each chunk to the UI
-                        port.postMessage({
+                        chrome.runtime.sendMessage({
                             type: 'OLLAMA_RESPONSE',
                             success: true,
                             response: fullResponse,
