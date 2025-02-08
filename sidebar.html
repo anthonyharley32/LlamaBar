@@ -12,9 +12,18 @@
                 <div class="model-badge">
                     <span>Sidellama</span>
                 </div>
-                <select id="model-selector" class="model-selector">
-                    <option value="loading">Loading models...</option>
-                </select>
+                <div class="header-controls">
+                    <select id="model-selector" class="model-selector">
+                        <option value="loading">Loading models...</option>
+                    </select>
+                    <div class="markdown-toggle">
+                        <label class="switch">
+                            <input type="checkbox" id="markdown-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="toggle-label">MD</span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -61,6 +70,7 @@
             </div>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="sidebar.js"></script>
 </body>
 </html> 

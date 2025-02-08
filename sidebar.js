@@ -10,11 +10,18 @@ const modelSelector = document.getElementById('model-selector');
 const imagePreview = document.getElementById('image-preview');
 const explainButtonContainer = document.getElementById('explain-button-container');
 const inputExplainButton = document.getElementById('input-explain-button');
+const markdownToggle = document.getElementById('markdown-toggle');
 
 let currentAssistantMessage = null;
 let currentModel = 'llama3.2:1b';
 let currentImage = null;
 let setupWizardFrame = null;
+let markdownEnabled = false;
+
+// Initialize markdown toggle
+markdownToggle.addEventListener('change', (e) => {
+    markdownEnabled = e.target.checked;
+});
 
 // Check setup status
 async function checkSetupStatus() {
@@ -110,8 +117,6 @@ async function initializeModelSelector() {
 // Model selection change handler
 modelSelector.addEventListener('change', (e) => {
     currentModel = e.target.value;
-    // Add a system message about model change
-    addMessage('assistant', `Switched to ${currentModel} model`);
 });
 
 // Handle image paste
@@ -203,25 +208,29 @@ function handleUserInput(text) {
                          currentModel.toLowerCase().includes('dream') || 
                          currentModel.toLowerCase().includes('image');
     
-    // Prepare the prompt based on whether there's an image
+    // Prepare the prompt based on whether there's an image and markdown mode
     let prompt = text;
     if (currentImage) {
         if (isVisionModel) {
             console.log('Preparing vision model request');
-            // Remove the data:image/[type];base64, prefix if present
             const base64Data = currentImage.split(',')[1] || currentImage;
             prompt = `<image>data:image/jpeg;base64,${base64Data}</image>\n${text}`;
         } else {
             console.warn('Attempting to use image with non-vision model:', currentModel);
-            // For other models that might handle images differently
             prompt = `[Image]\n${text}`;
         }
+    }
+    
+    // Add markdown instruction if enabled
+    if (markdownEnabled) {
+        prompt = `Please format your response in Markdown.\n\n${prompt}`;
     }
     
     console.log('Sending query:', {
         modelType: isVisionModel ? 'vision' : 'text',
         hasImage: !!currentImage,
-        model: currentModel
+        model: currentModel,
+        markdownEnabled
     });
     
     // Send message to background script with current model
@@ -285,8 +294,18 @@ chrome.runtime.onMessage.addListener((message) => {
                 // Only append the new content
                 if (newResponse.length > prevResponse.length) {
                     const newContent = newResponse.slice(prevResponse.length);
-                    const textNode = document.createTextNode(newContent);
-                    currentAssistantMessage.appendChild(textNode);
+                    
+                    if (markdownEnabled && message.done) {
+                        // If it's the final message and markdown is enabled, parse the entire response
+                        currentAssistantMessage.innerHTML = marked.parse(newResponse);
+                    } else if (markdownEnabled) {
+                        // For streaming, accumulate the text content
+                        currentAssistantMessage.textContent = newResponse;
+                    } else {
+                        // For non-markdown responses, handle as before
+                        const textNode = document.createTextNode(newContent);
+                        currentAssistantMessage.appendChild(textNode);
+                    }
                     
                     // Smooth scroll to bottom without causing reflow
                     requestAnimationFrame(() => {
@@ -299,6 +318,10 @@ chrome.runtime.onMessage.addListener((message) => {
             }
             
             if (message.done) {
+                if (markdownEnabled && currentAssistantMessage) {
+                    // Parse the complete message with markdown
+                    currentAssistantMessage.innerHTML = marked.parse(currentAssistantMessage.textContent);
+                }
                 currentAssistantMessage = null;
             }
         } else {
