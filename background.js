@@ -185,14 +185,55 @@ async function handleOllamaQuery(prompt, model = 'llama3.2:1b') {
             // Format specifically for Moondream
             requestBody = {
                 model: model,
-                prompt: textPrompt,
-                images: [cleanBase64],
-                stream: true,
-                raw: true,  // Important for Moondream
+                messages: [{
+                    role: "user",
+                    content: "describe this image",
+                    images: [cleanBase64]
+                }],
+                stream: false,  // Disable streaming for more reliable responses
                 options: {
-                    temperature: 0.0  // Moondream works better with temperature 0
+                    temperature: 0.0,  // Keep temperature at 0 for more consistent responses
+                    num_predict: 500   // Ensure we get a complete response
                 }
             };
+
+            // Use chat endpoint for vision models
+            const response = await fetch('http://localhost:11434/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Origin': 'chrome-extension://' + chrome.runtime.id
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Ollama error response:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: errorText
+                });
+                return {
+                    success: false,
+                    error: `Ollama error: ${response.status} ${response.statusText}\n${errorText}`
+                };
+            }
+
+            // Handle non-streaming response
+            const data = await response.json();
+            if (data.message && data.message.content) {
+                chrome.runtime.sendMessage({
+                    type: 'OLLAMA_RESPONSE',
+                    success: true,
+                    response: data.message.content,
+                    done: true
+                });
+            }
+
+            return { success: true };
         } else {
             // Regular text prompt for other models
             console.log('Processing text-only request');
