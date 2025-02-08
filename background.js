@@ -135,8 +135,75 @@ async function handleOllamaQuery(prompt, model = 'llama3.2:1b') {
                 throw new Error('Ollama is not running or not accessible');
             }
         } catch (error) {
+            console.error('Ollama connection error:', error);
             throw new Error('Cannot connect to Ollama. Please ensure it is running on port 11434');
         }
+
+        // Determine if this is a vision-capable model
+        const isVisionModel = model.toLowerCase().includes('vision') || 
+                            model.toLowerCase().includes('dream') || 
+                            model.toLowerCase().includes('image');
+        
+        console.log('Model type check:', {
+            model: model,
+            isVisionModel: isVisionModel,
+            hasImage: prompt.includes('<image>')
+        });
+
+        let requestBody = {
+            model: model,
+            stream: true,
+            options: {
+                temperature: 0.7,
+                top_k: 50,
+                top_p: 0.95,
+                repeat_penalty: 1.1
+            }
+        };
+
+        // Handle vision model format
+        if (isVisionModel && prompt.includes('<image>')) {
+            console.log('Processing vision model request');
+            const imageMatch = prompt.match(/<image>(.*?)<\/image>/s);
+            const base64Image = imageMatch ? imageMatch[1] : null;
+            const textPrompt = prompt.replace(/<image>.*?<\/image>/s, '').trim();
+
+            if (!base64Image) {
+                console.error('No image data found in prompt');
+                throw new Error('Image data is missing or invalid');
+            }
+
+            // Clean the base64 data - remove data URL prefix if present
+            const cleanBase64 = base64Image.replace(/^data:image\/[a-z]+;base64,/, '');
+
+            console.log('Vision request structure:', {
+                model: model,
+                hasImage: !!cleanBase64,
+                promptLength: textPrompt.length
+            });
+
+            // Format specifically for Moondream
+            requestBody = {
+                model: model,
+                prompt: textPrompt,
+                images: [cleanBase64],
+                stream: true,
+                raw: true,  // Important for Moondream
+                options: {
+                    temperature: 0.0  // Moondream works better with temperature 0
+                }
+            };
+        } else {
+            // Regular text prompt for other models
+            console.log('Processing text-only request');
+            requestBody.prompt = prompt;
+        }
+
+        console.log('Sending request to Ollama:', {
+            model: model,
+            endpoint: '/api/generate',
+            requestType: isVisionModel ? 'vision' : 'text'
+        });
 
         const response = await fetch('http://localhost:11434/api/generate', {
             method: 'POST',
@@ -144,27 +211,21 @@ async function handleOllamaQuery(prompt, model = 'llama3.2:1b') {
                 'Content-Type': 'application/json',
                 'Origin': 'chrome-extension://' + chrome.runtime.id
             },
-            body: JSON.stringify({
-                model: model,
-                prompt: prompt,
-                stream: true,
-                options: {
-                    temperature: 0.7,
-                    top_k: 50,
-                    top_p: 0.95,
-                    repeat_penalty: 1.1
-                }
-            })
+            body: JSON.stringify(requestBody)
         });
 
         clearTimeout(timeoutId);
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Ollama error response:', errorText);
+            console.error('Ollama error response:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorText
+            });
             return {
                 success: false,
-                error: `Ollama error: ${response.status} ${response.statusText}`
+                error: `Ollama error: ${response.status} ${response.statusText}\n${errorText}`
             };
         }
 

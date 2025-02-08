@@ -142,24 +142,32 @@ body {
 
 .input-wrapper {
     display: flex;
-    align-items: flex-end;
-    gap: 8px;
+    flex-direction: column;
     background: var(--message-bg);
     border-radius: 12px;
     padding: 8px 12px;
 }
 
+.input-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
 textarea {
-    flex: 1;
+    width: 100%;
+    min-height: 24px;
+    max-height: 200px;
     border: none;
     background: none;
     resize: none;
     padding: 8px 0;
-    max-height: 150px;
     font-family: inherit;
     font-size: 14px;
     line-height: 1.5;
     outline: none;
+    overflow-y: auto;
+    display: block;
 }
 
 .send-button {
@@ -172,6 +180,7 @@ textarea {
     display: flex;
     align-items: center;
     justify-content: center;
+    margin-left: auto;
 }
 
 .send-button:hover {
@@ -228,4 +237,60 @@ textarea {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #cdcdcd;
+}
+
+/* Image handling */
+.image-preview {
+    display: none;
+    width: 100%;
+    max-height: 200px;
+    margin-bottom: 8px;
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.image-preview.active {
+    display: block;
+}
+
+.image-preview img {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 8px;
+    object-fit: contain;
+    display: block;
+}
+
+.image-preview .remove-image {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.image-preview .remove-image:hover {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+/* Message images */
+.message img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 8px 0;
+}
+
+.user-message img {
+    max-width: 200px;
+    border-radius: 8px;
 } 
