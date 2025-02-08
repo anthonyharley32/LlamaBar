@@ -1,6 +1,6 @@
 /* Base styles */
 :root {
-    --primary-color: #6366f1;
+    --primary-color: #2196F3;
     --background-color: #ffffff;
     --text-color: #1f2937;
     --border-color: #e5e7eb;
@@ -324,4 +324,30 @@ textarea {
 .user-message img {
     max-width: 200px;
     border-radius: 8px;
+}
+
+/* Welcome Message */
+.welcome-message {
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.welcome-message h2 {
+    font-size: 32px;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 8px;
+}
+
+.welcome-message p {
+    font-size: 16px;
+    color: #1f2937;
+    margin: 0;
+}
+
+/* Hide welcome message when chat has messages */
+.chat-container .message ~ .welcome-message {
+    display: none;
 } 

@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Setup Wizard - Local AI Assistant</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://localhost:11434; script-src 'self'; style-src 'self' 'unsafe-inline';">
     <style>
         .wizard-container {
             max-width: 600px;
@@ -65,27 +66,53 @@
         .status-indicator {
             display: flex;
             align-items: center;
-            margin-top: 10px;
+            margin: 15px 0;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-weight: 500;
         }
         
         .status-indicator::before {
             content: '';
-            width: 12px;
-            height: 12px;
+            width: 16px;
+            height: 16px;
             border-radius: 50%;
-            margin-right: 8px;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+        
+        .status-indicator.success {
+            background: #e8f5e9;
+            color: #2e7d32;
         }
         
         .status-indicator.success::before {
-            background: #28a745;
+            background: #2e7d32;
+        }
+        
+        .status-indicator.error {
+            background: #fdecea;
+            color: #d32f2f;
         }
         
         .status-indicator.error::before {
-            background: #dc3545;
+            background: #d32f2f;
+        }
+        
+        .status-indicator.pending {
+            background: #fff3e0;
+            color: #ef6c00;
         }
         
         .status-indicator.pending::before {
-            background: #ffc107;
+            background: #ef6c00;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
         }
 
         .download-link {
@@ -98,6 +125,149 @@
         .download-link:hover {
             text-decoration: underline;
         }
+
+        .setup-steps {
+            margin: 20px 0;
+        }
+        
+        .setup-step {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .setup-step h3 {
+            margin: 0 0 10px 0;
+            color: #2196F3;
+            font-size: 1.1em;
+        }
+        
+        .setup-step ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .setup-step li {
+            margin: 5px 0;
+        }
+        
+        .note {
+            margin-top: 15px;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .download-link {
+            display: inline-block;
+            background: #2196F3;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin: 10px 0;
+            transition: background 0.3s;
+        }
+        
+        .download-link:hover {
+            background: #1976D2;
+            text-decoration: none;
+        }
+
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .code-block code {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            color: #333;
+            font-size: 0.9em;
+            white-space: nowrap;
+            overflow: auto;
+            flex: 1;
+        }
+
+        .copy-button {
+            background: #e9ecef;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            color: #495057;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s ease;
+            min-width: 60px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .copy-button:hover {
+            background: #dee2e6;
+        }
+
+        .copy-button.copy-success {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .copy-button.copy-error {
+            background: #f44336;
+            color: white;
+        }
+
+        .primary-button {
+            background: #2196F3;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .primary-button:hover {
+            background: #1976D2;
+        }
+
+        .secondary-button {
+            background: #90caf9;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            opacity: 0.7;
+        }
+
+        .secondary-button:not(:disabled) {
+            background: #2196F3;
+            opacity: 1;
+        }
+
+        .secondary-button:hover:not(:disabled) {
+            background: #1976D2;
+            transform: translateY(-1px);
+        }
+
+        .secondary-button:disabled,
+        .secondary-button.disabled {
+            background: #e0e0e0;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
     </style>
 </head>
 <body>
@@ -105,23 +275,48 @@
         <div id="step1" class="step active">
             <div class="step-title">Welcome to Local AI Assistant</div>
             <div class="step-content">
-                <p>Let's get you set up with Ollama.</p>
-                <div id="ollamaStatus" class="status-indicator pending">
-                    Checking Ollama installation...
+                <p>Let's get you set up with Ollama. Follow these steps:</p>
+                
+                <div class="setup-steps">
+                    <div class="setup-step">
+                        <h3>1. Install Ollama</h3>
+                        <p>If you haven't already, download and install Ollama:</p>
+                        <a href="https://ollama.ai" target="_blank" class="download-link">Download Ollama</a>
+                    </div>
+
+                    <div class="setup-step">
+                        <h3>2. Start Ollama</h3>
+                        <p>Make sure Ollama is running:</p>
+                        <ul>
+                            <li>Open the Ollama application from your Applications folder</li>
+                            <li>Look for the Ollama icon in your menu bar</li>
+                        </ul>
+                        <p class="note">If Ollama is already running but not connecting:</p>
+                        <ul>
+                            <li>Click the Ollama icon in the menu bar</li>
+                            <li>Select "Quit"</li>
+                            <li>Wait a few seconds</li>
+                            <li>Open Ollama again</li>
+                        </ul>
+                    </div>
+
+                    <div id="terminalInstructions" class="setup-step" style="display: none;">
+                        <h3>3. Enable Chrome Extension Access</h3>
+                        <p>Open Terminal and run this command:</p>
+                        <div class="code-block">
+                            <code>OLLAMA_ORIGINS="chrome-extension://*" ollama serve</code>
+                        </div>
+                        <p class="note">Keep the terminal window open while using the extension</p>
+                    </div>
                 </div>
-                <div id="ollamaInstructions" style="display: none;">
-                    <p>1. First, download and install Ollama:</p>
-                    <a href="https://ollama.ai" target="_blank" class="download-link">Download Ollama</a>
-                    
-                    <p>2. Then, start the Ollama server:</p>
-                    <div class="instructions" id="startInstructions"></div>
-                    
-                    <p>3. Click "Check Again" after starting the server</p>
+
+                <div id="ollamaStatus" class="status-indicator pending">
+                    Click "Check Connection" to verify Ollama is running properly
                 </div>
             </div>
             <div class="step-actions">
-                <button id="checkOllama">Check Again</button>
-                <button id="nextStep1" disabled>Next</button>
+                <button id="checkOllama" class="primary-button">Check Connection</button>
+                <button id="nextStep1" class="secondary-button" disabled>Next</button>
             </div>
         </div>
 
@@ -153,95 +348,6 @@
         </div>
     </div>
 
-    <script type="module">
-        import { checkOllamaInstallation, checkRequiredModel, getOllamaStartInstructions } from '../utils/setup-checker.js';
-
-        let currentStep = 1;
-        
-        // Step navigation
-        function showStep(step) {
-            document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
-            document.getElementById(`step${step}`).classList.add('active');
-            currentStep = step;
-        }
-
-        // Show/hide Ollama instructions
-        function toggleOllamaInstructions(show) {
-            const instructions = document.getElementById('ollamaInstructions');
-            instructions.style.display = show ? 'block' : 'none';
-            if (show) {
-                document.getElementById('startInstructions').textContent = getOllamaStartInstructions();
-            }
-        }
-
-        // Event listeners
-        document.getElementById('checkOllama').addEventListener('click', async () => {
-            const status = await checkOllamaInstallation();
-            const statusEl = document.getElementById('ollamaStatus');
-            
-            if (status.installed) {
-                statusEl.className = 'status-indicator success';
-                statusEl.textContent = `Ollama ${status.version} is installed and running`;
-                document.getElementById('nextStep1').disabled = false;
-                toggleOllamaInstructions(false);
-            } else {
-                statusEl.className = 'status-indicator error';
-                statusEl.textContent = status.error;
-                toggleOllamaInstructions(true);
-            }
-        });
-
-        document.getElementById('installModel').addEventListener('click', async () => {
-            const statusEl = document.getElementById('modelStatus');
-            statusEl.className = 'status-indicator pending';
-            statusEl.textContent = 'Installing model...';
-            
-            try {
-                const response = await fetch('http://localhost:11434/api/pull', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: 'llama3.2:1b' })
-                });
-                
-                if (response.ok) {
-                    statusEl.className = 'status-indicator success';
-                    statusEl.textContent = 'Model installed successfully';
-                    document.getElementById('nextStep2').disabled = false;
-                } else {
-                    throw new Error('Failed to install model');
-                }
-            } catch (error) {
-                statusEl.className = 'status-indicator error';
-                statusEl.textContent = 'Failed to install model: ' + error.message;
-            }
-        });
-
-        // Navigation buttons
-        document.getElementById('nextStep1').addEventListener('click', () => showStep(2));
-        document.getElementById('prevStep2').addEventListener('click', () => showStep(1));
-        document.getElementById('nextStep2').addEventListener('click', () => showStep(3));
-        document.getElementById('prevStep3').addEventListener('click', () => showStep(2));
-        document.getElementById('finish').addEventListener('click', () => {
-            // Close the wizard and notify the parent
-            window.parent.postMessage({ type: 'SETUP_COMPLETE' }, '*');
-        });
-
-        // Initial check
-        window.addEventListener('load', async () => {
-            const status = await checkOllamaInstallation();
-            const statusEl = document.getElementById('ollamaStatus');
-            
-            if (status.installed) {
-                statusEl.className = 'status-indicator success';
-                statusEl.textContent = `Ollama ${status.version} is installed and running`;
-                document.getElementById('nextStep1').disabled = false;
-                toggleOllamaInstructions(false);
-            } else {
-                statusEl.className = 'status-indicator error';
-                statusEl.textContent = status.error;
-                toggleOllamaInstructions(true);
-            }
-        });
-    </script>
+    <script src="../utils/setup-wizard.js"></script>
 </body>
 </html> 

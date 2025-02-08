@@ -154,6 +154,14 @@ window.removeImage = function() {
 
 // Add message to chat
 function addMessage(type, content) {
+    // Hide welcome message when first message is added
+    const welcomeMessage = document.querySelector('.welcome-message');
+    if (welcomeMessage) {
+        welcomeMessage.style.opacity = '0';
+        welcomeMessage.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => welcomeMessage.remove(), 300);
+    }
+
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}-message`;
     

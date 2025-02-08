@@ -6,7 +6,8 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "sidePanel"
+    "sidePanel",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "http://localhost:11434/*"
@@ -35,5 +36,8 @@
       ],
       "matches": ["<all_urls>"]
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:11434"
+  }
 } 
