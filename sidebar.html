@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Local AI Assistant</title>
+    <link rel="stylesheet" href="/styles/sidebar.css">
+</head>
+<body>
+    <div class="sidebar-container" role="complementary" aria-label="AI Assistant Sidebar">
+        <div class="sidebar-header">
+            <h1 id="sidebar-title">Local AI Assistant</h1>
+            <div class="model-info" aria-label="Model Information">
+                <span class="model-badge" role="status">Ollama</span>
+            </div>
+        </div>
+
+        <div class="chat-container">
+            <div id="chat-messages" class="chat-messages" role="log" aria-label="Chat Messages">
+                <!-- Messages will be inserted here -->
+            </div>
+
+            <div class="selection-popup" id="selection-popup" style="display: none;" role="dialog" aria-labelledby="selection-text">
+                <div class="selection-text" id="selection-text"></div>
+                <div class="selection-actions" role="group" aria-label="Text Actions">
+                    <button class="action-button" id="explain-button" aria-label="Explain selected text">Explain</button>
+                    <button class="action-button" id="translate-button" aria-label="Translate selected text">Translate</button>
+                    <button class="action-button" id="more-button" aria-label="More options">•••</button>
+                </div>
+            </div>
+
+            <div class="input-container">
+                <textarea 
+                    id="user-input" 
+                    placeholder="Type a message..." 
+                    rows="1"
+                    class="chat-input"
+                    aria-label="Message input"
+                ></textarea>
+                <button id="send-button" class="send-button" aria-label="Send message">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                        <path d="M22 2L11 13M22 2L15 22L11 13M11 13L2 9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    <script src="/sidebar.js"></script>
+</body>
+</html> 
