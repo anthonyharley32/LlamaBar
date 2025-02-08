@@ -67,7 +67,7 @@ chrome.runtime.onConnect.addListener((port) => {
     port.onMessage.addListener(async (message) => {
         if (message.type === 'QUERY_OLLAMA') {
             try {
-                const response = await handleOllamaQuery(message.prompt, tabId);
+                const response = await handleOllamaQuery(message.prompt, message.model);
                 if (!response.success) {
                     port.postMessage({ 
                         type: 'OLLAMA_RESPONSE',
@@ -101,7 +101,7 @@ chrome.runtime.onInstalled.addListener(() => {
 // Handle messages from the side panel
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'QUERY_OLLAMA') {
-        handleOllamaQuery(message.prompt)
+        handleOllamaQuery(message.prompt, message.model)
             .then(response => {
                 if (!response.success) {
                     chrome.runtime.sendMessage({
@@ -123,7 +123,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // Function to communicate with Ollama
-async function handleOllamaQuery(prompt) {
+async function handleOllamaQuery(prompt, model = 'llama3.2:1b') {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -141,10 +141,11 @@ async function handleOllamaQuery(prompt) {
         const response = await fetch('http://localhost:11434/api/generate', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Origin': 'chrome-extension://' + chrome.runtime.id
             },
             body: JSON.stringify({
-                model: 'llama3.2:1b',
+                model: model,
                 prompt: prompt,
                 stream: true,
                 options: {

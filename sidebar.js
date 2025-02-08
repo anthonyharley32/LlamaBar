@@ -6,8 +6,45 @@ const selectionPopup = document.getElementById('selection-popup');
 const selectionText = document.getElementById('selection-text');
 const explainButton = document.getElementById('explain-button');
 const translateButton = document.getElementById('translate-button');
+const modelSelector = document.getElementById('model-selector');
 
 let currentAssistantMessage = null;
+let currentModel = 'llama3.2:1b';
+
+// Initialize model selector
+async function initializeModelSelector() {
+    try {
+        const response = await fetch('http://localhost:11434/api/tags');
+        if (!response.ok) {
+            throw new Error('Failed to fetch models');
+        }
+        const data = await response.json();
+        
+        // Clear loading option
+        modelSelector.innerHTML = '';
+        
+        // Add available models
+        data.models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.name;
+            option.textContent = model.name;
+            if (model.name === currentModel) {
+                option.selected = true;
+            }
+            modelSelector.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading models:', error);
+        modelSelector.innerHTML = '<option value="error">Error loading models</option>';
+    }
+}
+
+// Model selection change handler
+modelSelector.addEventListener('change', (e) => {
+    currentModel = e.target.value;
+    // Add a system message about model change
+    addMessage('assistant', `Switched to ${currentModel} model`);
+});
 
 // Handle user input
 function handleUserInput(text) {
@@ -17,10 +54,11 @@ function handleUserInput(text) {
     // Reset currentAssistantMessage to ensure a new response element is created
     currentAssistantMessage = null;
     
-    // Send message to background script
+    // Send message to background script with current model
     chrome.runtime.sendMessage({
         type: 'QUERY_OLLAMA',
-        prompt: text
+        prompt: text,
+        model: currentModel
     });
 }
 
@@ -114,4 +152,7 @@ document.addEventListener('click', (e) => {
     if (!selectionPopup.contains(e.target)) {
         selectionPopup.style.display = 'none';
     }
-}); 
+});
+
+// Initialize the model selector when the sidebar loads
+initializeModelSelector(); 
