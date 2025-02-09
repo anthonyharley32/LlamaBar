@@ -405,4 +405,39 @@ window.addEventListener('load', async () => {
     if (isSetup) {
         initializeModelSelector();
     }
+});
+
+// Settings menu functionality
+const settingsButton = document.getElementById('settings-button');
+const settingsMenu = document.getElementById('settings-menu');
+const launchLocalButton = document.getElementById('launch-local');
+const addApiKeyButton = document.getElementById('add-api-key');
+
+// Toggle settings menu
+settingsButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    settingsMenu.classList.toggle('show');
+});
+
+// Close menu when clicking outside
+document.addEventListener('click', (e) => {
+    if (!settingsMenu.contains(e.target) && !settingsButton.contains(e.target)) {
+        settingsMenu.classList.remove('show');
+    }
+});
+
+// Launch local handler
+launchLocalButton.addEventListener('click', () => {
+    // Store the command for later use
+    const command = 'OLLAMA_ORIGINS="chrome-extension://*" ollama serve';
+    // You can implement the actual launch functionality here
+    console.log('Launch local command:', command);
+    settingsMenu.classList.remove('show');
+});
+
+// Add API key handler
+addApiKeyButton.addEventListener('click', () => {
+    // Implement API key functionality here
+    console.log('Add API key clicked');
+    settingsMenu.classList.remove('show');
 }); 

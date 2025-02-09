@@ -485,4 +485,67 @@ textarea {
 /* Hide welcome message when chat has messages */
 .chat-container .message ~ .welcome-message {
     display: none;
+}
+
+/* Settings Dropdown */
+.settings-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.settings-button {
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    color: var(--text-color);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-button:hover {
+    background: var(--hover-color);
+}
+
+.settings-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px var(--shadow-color);
+    z-index: 1000;
+    min-width: 150px;
+}
+
+.settings-menu.show {
+    display: block;
+}
+
+.settings-item {
+    display: block;
+    width: 100%;
+    padding: 8px 16px;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-color);
+    font-size: 14px;
+}
+
+.settings-item:hover {
+    background: var(--hover-color);
+}
+
+.settings-item:first-child {
+    border-radius: 8px 8px 0 0;
+}
+
+.settings-item:last-child {
+    border-radius: 0 0 8px 8px;
 } 

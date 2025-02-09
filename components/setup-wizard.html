@@ -2,7 +2,7 @@
 <html>
 <head>
     <title>Setup Wizard - Local AI Assistant</title>
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://localhost:11434; script-src 'self'; style-src 'self' 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://localhost:11434; script-src 'self'; style-src 'self' 'unsafe-inline'; clipboard-write 'self';">
     <style>
         .wizard-container {
             max-width: 600px;
@@ -132,30 +132,37 @@
         
         .setup-step {
             background: #fff;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 12px;
             border: 1px solid #e0e0e0;
         }
         
         .setup-step h3 {
-            margin: 0 0 10px 0;
+            margin: 0 0 8px 0;
             color: #2196F3;
             font-size: 1.1em;
         }
         
+        .setup-step p {
+            margin: 0 0 8px 0;
+            font-size: 0.95em;
+        }
+        
         .setup-step ul {
-            margin: 10px 0;
+            margin: 8px 0;
             padding-left: 20px;
         }
         
         .setup-step li {
-            margin: 5px 0;
+            margin: 4px 0;
+            font-size: 0.95em;
         }
         
         .note {
-            margin-top: 15px;
+            margin-top: 6px;
             color: #666;
+            font-size: 0.85em;
             font-style: italic;
         }
         
@@ -178,22 +185,17 @@
         .code-block {
             background: #f8f9fa;
             border: 1px solid #e9ecef;
-            border-radius: 6px;
-            padding: 12px 16px;
-            margin: 10px 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin: 8px 0;
         }
 
         .code-block code {
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             color: #333;
             font-size: 0.9em;
-            white-space: nowrap;
-            overflow: auto;
-            flex: 1;
+            display: block;
+            overflow-x: auto;
         }
 
         .copy-button {
@@ -206,9 +208,7 @@
             font-size: 0.9em;
             transition: all 0.2s ease;
             min-width: 60px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
+            white-space: nowrap;
         }
 
         .copy-button:hover {
@@ -268,6 +268,50 @@
             cursor: not-allowed;
             opacity: 0.7;
         }
+
+        .install-options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 12px 0;
+        }
+        
+        .install-option {
+            background: #fff;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .install-option h4 {
+            margin: 0 0 8px 0;
+            color: #2196F3;
+            font-size: 1em;
+            font-weight: 500;
+        }
+
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin: 8px 0;
+        }
+
+        .code-block code {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            color: #333;
+            font-size: 0.9em;
+            display: block;
+            overflow-x: auto;
+        }
+
+        .note {
+            margin-top: 6px;
+            color: #666;
+            font-size: 0.85em;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -280,8 +324,31 @@
                 <div class="setup-steps">
                     <div class="setup-step">
                         <h3>1. Install Ollama</h3>
-                        <p>If you haven't already, download and install Ollama:</p>
-                        <a href="https://ollama.ai" target="_blank" class="download-link">Download Ollama</a>
+                        <p>Choose your operating system and run the appropriate command:</p>
+                        
+                        <div class="install-options">
+                            <div class="install-option">
+                                <h4>macOS</h4>
+                                <div class="code-block">
+                                    <code>brew install ollama</code>
+                                </div>
+                            </div>
+
+                            <div class="install-option">
+                                <h4>Windows</h4>
+                                <div class="code-block">
+                                    <code>curl -L https://ollama.ai/download/ollama-windows.zip -o ollama-windows.zip</code>
+                                </div>
+                                <p class="note">After downloading, extract the zip file and run Ollama.exe</p>
+                            </div>
+
+                            <div class="install-option">
+                                <h4>Linux</h4>
+                                <div class="code-block">
+                                    <code>curl https://ollama.ai/install.sh | sh</code>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="setup-step">
@@ -323,15 +390,19 @@
         <div id="step2" class="step">
             <div class="step-title">Install Required Model</div>
             <div class="step-content">
-                <p>We need to install the default model (llama3.2:1b).</p>
+                <p>You'll need at least one model installed to use LlamaBar. If you're not sure which model to choose, we recommend starting with llama3.2:1b:</p>
+                
+                <div class="code-block">
+                    <code>ollama pull llama3.2:1b</code>
+                </div>
+
                 <div id="modelStatus" class="status-indicator pending">
-                    Checking model availability...
+                    Checking for installed models...
                 </div>
             </div>
             <div class="step-actions">
-                <button id="prevStep2">Previous</button>
-                <button id="installModel">Install Model</button>
-                <button id="nextStep2" disabled>Next</button>
+                <button id="prevStep2" class="secondary-button">Previous</button>
+                <button id="nextStep2" class="secondary-button" disabled>Next</button>
             </div>
         </div>
 

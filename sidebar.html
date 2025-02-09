@@ -16,6 +16,19 @@
                     <select id="model-selector" class="model-selector">
                         <option value="loading">Loading models...</option>
                     </select>
+                    <div class="settings-dropdown">
+                        <button id="settings-button" class="settings-button">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                                <circle cx="12" cy="5" r="2" fill="currentColor"/>
+                                <circle cx="12" cy="19" r="2" fill="currentColor"/>
+                            </svg>
+                        </button>
+                        <div id="settings-menu" class="settings-menu">
+                            <button id="launch-local" class="settings-item">Launch Local</button>
+                            <button id="add-api-key" class="settings-item">Add API Key</button>
+                        </div>
+                    </div>
                     <div class="markdown-toggle">
                         <label class="switch">
                             <input type="checkbox" id="markdown-toggle">
