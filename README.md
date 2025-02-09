@@ -1,6 +1,6 @@
-# Local AI Assistant Chrome Extension
+# LlamaBar
 
-A Chrome extension that provides an AI assistant powered by Ollama, running completely locally on your machine. It adds a convenient sidebar interface for interacting with local LLMs through Ollama.
+A Chrome extension that provides a local AI assistant powered by Ollama, running completely locally on your machine. It adds a convenient sidebar interface for interacting with local LLMs through Ollama.
 
 ## Features
 

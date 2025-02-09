@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Local AI Assistant",
+  "name": "LlamaBar",
   "version": "1.0",
   "description": "A Chrome extension for interacting with Ollama",
   "permissions": [
@@ -13,7 +13,7 @@
     "http://localhost:11434/*"
   ],
   "action": {
-    "default_title": "Open AI Sidebar",
+    "default_title": "LlamaBar",
     "default_icon": {
       "16": "assets/icon16.jpg",
       "48": "assets/icon48.jpg",
