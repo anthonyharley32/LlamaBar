@@ -71,11 +71,20 @@ async function checkOllamaConnection() {
         for (connectionAttempts = 0; connectionAttempts < MAX_ATTEMPTS; connectionAttempts++) {
             try {
                 const response = await fetch('http://localhost:11434/api/version');
+                if (response.status === 403) {
+                    // Immediately handle CORS error
+                    throw new Error('CORS not configured. Ollama needs to be started with CORS settings.');
+                }
+                
                 if (response.ok) {
                     const version = await response.json();
                     
                     // Check if CORS is properly configured
                     const modelResponse = await fetch('http://localhost:11434/api/tags');
+                    if (modelResponse.status === 403) {
+                        throw new Error('CORS not configured. Ollama needs to be started with CORS settings.');
+                    }
+                    
                     if (modelResponse.ok) {
                         statusEl.className = 'status-indicator success';
                         statusEl.textContent = `Successfully connected to Ollama ${version.version}!`;
@@ -87,6 +96,15 @@ async function checkOllamaConnection() {
                 }
             } catch (e) {
                 console.error('Connection attempt failed:', e);
+                if (e.message.includes('CORS')) {
+                    // Immediately show terminal instructions for CORS errors
+                    statusEl.className = 'status-indicator error';
+                    statusEl.textContent = 'Ollama is running but needs CORS settings. Please follow the instructions below.';
+                    nextButton.disabled = true;
+                    nextButton.classList.add('disabled');
+                    terminalInstructions.style.display = 'block';
+                    return;
+                }
             }
             
             // Wait before next attempt
@@ -99,7 +117,9 @@ async function checkOllamaConnection() {
     } catch (error) {
         console.error('Connection check failed:', error);
         statusEl.className = 'status-indicator error';
-        statusEl.textContent = 'Could not connect to Ollama. Please follow the instructions below.';
+        statusEl.textContent = error.message.includes('CORS') 
+            ? 'Ollama is running but needs CORS settings. Please follow the instructions below.'
+            : 'Could not connect to Ollama. Please follow the instructions below.';
         nextButton.disabled = true;
         nextButton.classList.add('disabled');
         terminalInstructions.style.display = 'block';

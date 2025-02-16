@@ -126,9 +126,17 @@ input:checked + .slider:before {
     font-weight: 500;
 }
 
+.model-selector-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
 .model-selector {
     width: 100%;
     padding: 8px;
+    padding-right: 36px; /* Increased padding to make room for the shifted logo */
     border: 1px solid var(--border-color);
     border-radius: 8px;
     background: var(--background-color);
@@ -137,6 +145,20 @@ input:checked + .slider:before {
     cursor: pointer;
     outline: none;
     transition: border-color 0.2s;
+}
+
+.ollama-logo {
+    position: relative;
+    right: 12px; /* Changed from 8px to 12px to move it left relative to the selector edge */
+    width: 20px;
+    height: 20px;
+    pointer-events: none;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.ollama-logo:hover {
+    opacity: 1;
 }
 
 .model-selector:hover {
@@ -519,7 +541,7 @@ textarea {
     border-radius: 8px;
     box-shadow: 0 2px 8px var(--shadow-color);
     z-index: 1000;
-    min-width: 150px;
+    min-width: 200px;
 }
 
 .settings-menu.show {
@@ -548,4 +570,93 @@ textarea {
 
 .settings-item:last-child {
     border-radius: 0 0 8px 8px;
+}
+
+/* API Key Dropdown Styles */
+.api-key-dropdown {
+    display: none;
+    padding: 8px 0;
+    border-top: 1px solid var(--border-color);
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.api-key-dropdown.show {
+    display: block;
+}
+
+.api-provider {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s;
+}
+
+.api-provider:last-child {
+    border-bottom: none;
+}
+
+.api-provider:hover {
+    background-color: var(--hover-color);
+}
+
+.provider-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.provider-logo {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    border-radius: 4px;
+}
+
+.provider-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.api-key-input {
+    display: none;
+    margin-top: 12px;
+    gap: 8px;
+}
+
+.api-key-input.show {
+    display: flex;
+}
+
+.key-input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+    background-color: var(--background-color);
+}
+
+.key-input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+.save-key {
+    padding: 8px 12px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+    transition: opacity 0.2s;
+}
+
+.save-key:hover {
+    opacity: 0.9;
 } 

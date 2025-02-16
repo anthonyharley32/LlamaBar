@@ -7,13 +7,14 @@ const selectionText = document.getElementById('selection-text');
 const explainButton = document.getElementById('explain-button');
 const translateButton = document.getElementById('translate-button');
 const modelSelector = document.getElementById('model-selector');
+const ollamaLogo = document.getElementById('ollama-logo');
 const imagePreview = document.getElementById('image-preview');
 const explainButtonContainer = document.getElementById('explain-button-container');
 const inputExplainButton = document.getElementById('input-explain-button');
 const markdownToggle = document.getElementById('markdown-toggle');
 
 let currentAssistantMessage = null;
-let currentModel = 'llama3.2:1b';
+let currentModel = 'llama3.2:3b';
 let currentImage = null;
 let setupWizardFrame = null;
 let markdownEnabled = false;
@@ -22,6 +23,13 @@ let markdownEnabled = false;
 markdownToggle.addEventListener('change', (e) => {
     markdownEnabled = e.target.checked;
 });
+
+// Function to check if a model is local (Ollama-based)
+function isLocalModel(modelName) {
+    // Add more local model prefixes as needed
+    const localPrefixes = ['llama', 'mistral', 'codellama', 'phi', 'neural-chat', 'starling', 'yi', 'stable-code',  'qwen', 'moondream'];
+    return localPrefixes.some(prefix => modelName.toLowerCase().startsWith(prefix.toLowerCase()));
+}
 
 // Check setup status
 async function checkSetupStatus() {
@@ -106,9 +114,13 @@ async function initializeModelSelector() {
             }
             modelSelector.appendChild(option);
         });
+
+        // Show/hide Ollama logo based on current model
+        ollamaLogo.style.display = isLocalModel(currentModel) ? 'block' : 'none';
     } catch (error) {
         console.error('Error loading models:', error);
         modelSelector.innerHTML = '<option value="error">Error loading models</option>';
+        ollamaLogo.style.display = 'none';
         // Show setup wizard if there's an error
         showSetupWizard();
     }
@@ -117,6 +129,8 @@ async function initializeModelSelector() {
 // Model selection change handler
 modelSelector.addEventListener('change', (e) => {
     currentModel = e.target.value;
+    // Update Ollama logo visibility
+    ollamaLogo.style.display = isLocalModel(currentModel) ? 'block' : 'none';
 });
 
 // Handle image paste
@@ -412,32 +426,93 @@ const settingsButton = document.getElementById('settings-button');
 const settingsMenu = document.getElementById('settings-menu');
 const launchLocalButton = document.getElementById('launch-local');
 const addApiKeyButton = document.getElementById('add-api-key');
+const apiKeyDropdown = document.getElementById('api-key-dropdown');
 
 // Toggle settings menu
 settingsButton.addEventListener('click', (e) => {
     e.stopPropagation();
     settingsMenu.classList.toggle('show');
+    // Hide API key dropdown when closing settings menu
+    if (!settingsMenu.classList.contains('show')) {
+        apiKeyDropdown.classList.remove('show');
+    }
 });
 
 // Close menu when clicking outside
 document.addEventListener('click', (e) => {
     if (!settingsMenu.contains(e.target) && !settingsButton.contains(e.target)) {
         settingsMenu.classList.remove('show');
+        apiKeyDropdown.classList.remove('show');
     }
 });
 
 // Launch local handler
 launchLocalButton.addEventListener('click', () => {
-    // Store the command for later use
     const command = 'OLLAMA_ORIGINS="chrome-extension://*" ollama serve';
-    // You can implement the actual launch functionality here
     console.log('Launch local command:', command);
     settingsMenu.classList.remove('show');
 });
 
-// Add API key handler
-addApiKeyButton.addEventListener('click', () => {
-    // Implement API key functionality here
-    console.log('Add API key clicked');
-    settingsMenu.classList.remove('show');
+// Toggle API key dropdown
+addApiKeyButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    apiKeyDropdown.classList.toggle('show');
+});
+
+// Handle provider click to show/hide input
+document.querySelectorAll('.provider-info').forEach(providerInfo => {
+    providerInfo.addEventListener('click', () => {
+        const apiProvider = providerInfo.closest('.api-provider');
+        const apiKeyInput = apiProvider.querySelector('.api-key-input');
+        
+        // Hide all other inputs
+        document.querySelectorAll('.api-key-input').forEach(input => {
+            if (input !== apiKeyInput) {
+                input.classList.remove('show');
+            }
+        });
+        
+        // Toggle current input
+        apiKeyInput.classList.toggle('show');
+        if (apiKeyInput.classList.contains('show')) {
+            apiKeyInput.querySelector('.key-input').focus();
+        }
+    });
+});
+
+// Handle API key saving
+document.querySelectorAll('.save-key').forEach(button => {
+    button.addEventListener('click', (e) => {
+        const provider = e.target.closest('.api-provider');
+        const keyInput = provider.querySelector('.key-input');
+        const apiKey = keyInput.value.trim();
+        const providerId = keyInput.dataset.provider;
+        
+        if (apiKey) {
+            // Save API key to storage
+            chrome.storage.sync.set({
+                [`${providerId}_api_key`]: apiKey
+            }, () => {
+                console.log(`Saved API key for ${providerId}`);
+                keyInput.value = '';
+                provider.querySelector('.api-key-input').classList.remove('show');
+                // You might want to show a success message here
+            });
+        }
+    });
+});
+
+// Load saved API keys on startup
+window.addEventListener('load', () => {
+    chrome.storage.sync.get(null, (items) => {
+        // For each provider, check if we have a saved key
+        document.querySelectorAll('.key-input').forEach(input => {
+            const providerId = input.dataset.provider;
+            const key = items[`${providerId}_api_key`];
+            if (key) {
+                // Maybe show some indication that the key is saved
+                input.closest('.api-provider').classList.add('has-key');
+            }
+        });
+    });
 }); 

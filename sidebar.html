@@ -13,9 +13,12 @@
                     <span>LlamaBar</span>
                 </div>
                 <div class="header-controls">
-                    <select id="model-selector" class="model-selector">
-                        <option value="loading">Loading models...</option>
-                    </select>
+                    <div class="model-selector-container">
+                        <img id="ollama-logo" class="ollama-logo" src="assets/ollama.jpg" alt="Ollama" style="display: none;">
+                        <select id="model-selector" class="model-selector">
+                            <option value="loading">Loading models...</option>
+                        </select>
+                    </div>
                     <div class="settings-dropdown">
                         <button id="settings-button" class="settings-button">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -27,6 +30,68 @@
                         <div id="settings-menu" class="settings-menu">
                             <button id="launch-local" class="settings-item">Launch Local</button>
                             <button id="add-api-key" class="settings-item">Add API Key</button>
+                            <div id="api-key-dropdown" class="api-key-dropdown">
+                                <div class="api-provider">
+                                    <div class="provider-info">
+                                        <img src="assets/openai.jpg" alt="OpenAI" class="provider-logo">
+                                        <span class="provider-name">OpenAI</span>
+                                    </div>
+                                    <div class="api-key-input">
+                                        <input type="password" placeholder="Enter API Key" class="key-input" data-provider="openai">
+                                        <button class="save-key">Save</button>
+                                    </div>
+                                </div>
+                                <div class="api-provider">
+                                    <div class="provider-info">
+                                        <img src="assets/grok.webp" alt="Grok" class="provider-logo">
+                                        <span class="provider-name">Grok</span>
+                                    </div>
+                                    <div class="api-key-input">
+                                        <input type="password" placeholder="Enter API Key" class="key-input" data-provider="grok">
+                                        <button class="save-key">Save</button>
+                                    </div>
+                                </div>
+                                <div class="api-provider">
+                                    <div class="provider-info">
+                                        <img src="assets/claude.jpg" alt="Claude" class="provider-logo">
+                                        <span class="provider-name">Claude</span>
+                                    </div>
+                                    <div class="api-key-input">
+                                        <input type="password" placeholder="Enter API Key" class="key-input" data-provider="claude">
+                                        <button class="save-key">Save</button>
+                                    </div>
+                                </div>
+                                <div class="api-provider">
+                                    <div class="provider-info">
+                                        <img src="assets/meta.webp" alt="Meta" class="provider-logo">
+                                        <span class="provider-name">Meta</span>
+                                    </div>
+                                    <div class="api-key-input">
+                                        <input type="password" placeholder="Enter API Key" class="key-input" data-provider="meta">
+                                        <button class="save-key">Save</button>
+                                    </div>
+                                </div>
+                                <div class="api-provider">
+                                    <div class="provider-info">
+                                        <img src="assets/perplexity.png" alt="Perplexity" class="provider-logo">
+                                        <span class="provider-name">Perplexity</span>
+                                    </div>
+                                    <div class="api-key-input">
+                                        <input type="password" placeholder="Enter API Key" class="key-input" data-provider="perplexity">
+                                        <button class="save-key">Save</button>
+                                    </div>
+                                </div>
+                                <div class="api-provider">
+                                    <div class="provider-info">
+                                        <img src="assets/gemini.webp" alt="Gemini" class="provider-logo">
+                                        <span class="provider-name">Gemini</span>
+                                    </div>
+                                    <div class="api-key-input">
+                                        <input type="password" placeholder="Enter API Key" class="key-input" data-provider="gemini">
+                                        <button class="save-key">Save</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="markdown-toggle">
