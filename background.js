@@ -119,40 +119,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// Handle long-lived connections
-chrome.runtime.onConnect.addListener((port) => {
-    const tabId = port.sender.tab.id;
-    const connection = createConnection(tabId);
-    connection.isActive = true;
-    console.log('Connection established with tab:', tabId);
-
+// Handle messages from the popup
+chrome.runtime.onConnect.addListener((p) => {
+    port = p;
     port.onMessage.addListener(async (message) => {
         if (message.type === 'QUERY_OLLAMA') {
-            try {
-                const response = await handleOllamaQuery(message.prompt, message.model);
-                if (!response.success) {
-                    port.postMessage({
-                        type: 'OLLAMA_RESPONSE',
-                        success: false,
-                        error: response.error
-                    });
-                }
-            } catch (error) {
-                console.error('Error handling Ollama query:', error);
-                port.postMessage({
-                    type: 'OLLAMA_RESPONSE',
-                    success: false,
-                    error: error.message
-                });
+            const [provider, modelId] = message.model.split(':');
+            
+            if (provider === 'openai') {
+                await handleOpenAIRequest(message.prompt, message.model, message.hasImage);
+            } else {
+                // Handle Ollama request
+                await handleOllamaQuery(message.prompt, modelId);
             }
-        }
-    });
-
-    port.onDisconnect.addListener(() => {
-        const connection = connections.get(tabId);
-        if (connection) {
-            connection.isActive = false;
-            connection.port = null;
         }
     });
 });
@@ -379,5 +358,105 @@ async function handleOllamaQuery(prompt, model = 'llama3.2:1b') {
         };
     } finally {
         clearTimeout(timeoutId);
+    }
+}
+
+// Handle OpenAI API request
+async function handleOpenAIRequest(prompt, model, hasImage = false) {
+    try {
+        const apiKey = await ApiKeyManager.getApiKey('openai');
+        if (!apiKey) {
+            throw new Error('OpenAI API key not found');
+        }
+
+        // Extract the actual model ID (remove the 'openai:' prefix if present)
+        const modelId = model.replace('openai:', '');
+
+        const messages = [];
+        if (hasImage) {
+            const base64Image = prompt.match(/<image>(.*?)<\/image>/)?.[1];
+            const text = prompt.replace(/<image>.*?<\/image>\n?/, '').trim();
+            
+            messages.push({
+                role: 'user',
+                content: [
+                    { type: 'text', text },
+                    base64Image ? {
+                        type: 'image_url',
+                        image_url: { url: base64Image }
+                    } : null
+                ].filter(Boolean)
+            });
+        } else {
+            messages.push({
+                role: 'user',
+                content: prompt
+            });
+        }
+
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: modelId,
+                messages,
+                stream: true
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error?.message || `API error: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value);
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (line.trim() === '') continue;
+                if (line === 'data: [DONE]') continue;
+                
+                try {
+                    const json = JSON.parse(line.replace('data: ', ''));
+                    const content = json.choices[0]?.delta?.content || '';
+                    if (content) {
+                        port.postMessage({
+                            type: 'OLLAMA_RESPONSE',
+                            success: true,
+                            response: content,
+                            done: false
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Error parsing SSE message:', e);
+                }
+            }
+        }
+
+        port.postMessage({
+            type: 'OLLAMA_RESPONSE',
+            success: true,
+            response: '',
+            done: true
+        });
+
+    } catch (error) {
+        port.postMessage({
+            type: 'OLLAMA_RESPONSE',
+            success: false,
+            error: error.message
+        });
     }
 } 

@@ -7,11 +7,15 @@
     "activeTab",
     "scripting",
     "sidePanel",
-    "clipboardWrite",
-    "clipboardRead"
+    "storage"
   ],
   "host_permissions": [
-    "http://localhost:11434/*"
+    "http://localhost:11434/*",
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*",
+    "https://openrouter.ai/*",
+    "https://api.perplexity.ai/*",
+    "https://generativelanguage.googleapis.com/*"
   ],
   "action": {
     "default_title": "LlamaBar",
@@ -33,12 +37,14 @@
       "resources": [
         "styles/*",
         "components/*",
-        "utils/*"
+        "utils/*",
+        "assets/*",
+        "lib/*"
       ],
       "matches": ["<all_urls>"]
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:11434; clipboard-write 'self'; clipboard-read 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' http://localhost:11434 https://api.openai.com https://api.anthropic.com https://openrouter.ai https://api.perplexity.ai https://generativelanguage.googleapis.com"
   }
 } 

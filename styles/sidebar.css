@@ -549,7 +549,9 @@ textarea {
 }
 
 .settings-item {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     width: 100%;
     padding: 8px 16px;
     text-align: left;
@@ -562,6 +564,15 @@ textarea {
 
 .settings-item:hover {
     background: var(--hover-color);
+}
+
+.chevron-icon {
+    margin-left: 8px;
+    transition: transform 0.2s ease;
+}
+
+.settings-item:has(+ .api-key-dropdown.show) .chevron-icon {
+    transform: rotate(180deg);
 }
 
 .settings-item:first-child {
@@ -586,9 +597,8 @@ textarea {
 }
 
 .api-provider {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color);
     transition: background-color 0.2s;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .api-provider:last-child {
@@ -604,7 +614,13 @@ textarea {
     align-items: center;
     gap: 12px;
     cursor: pointer;
-    padding: 4px 0;
+    padding: 12px 16px;
+    width: 100%;
+    transition: background-color 0.2s;
+}
+
+.provider-info:hover {
+    background-color: var(--hover-color);
 }
 
 .provider-logo {
@@ -622,7 +638,7 @@ textarea {
 
 .api-key-input {
     display: none;
-    margin-top: 12px;
+    padding: 0 16px 12px 16px;
     gap: 8px;
 }
 

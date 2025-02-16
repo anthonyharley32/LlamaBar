@@ -1,3 +1,7 @@
+// Move imports to top
+import { ApiKeyManager } from './utils/api-key-manager.js';
+import { ApiService } from './utils/api-service.js';
+
 // DOM Elements
 const chatMessages = document.getElementById('chat-messages');
 const userInput = document.getElementById('user-input');
@@ -34,25 +38,32 @@ function isLocalModel(modelName) {
 // Check setup status
 async function checkSetupStatus() {
     try {
+        console.log('Checking Ollama server status...');
         const response = await fetch('http://localhost:11434/api/version');
         if (!response.ok) {
+            console.error('Ollama server not responding:', response.status);
             showSetupWizard();
             return false;
         }
         
-        // Check if required model is available
+        console.log('Checking available models...');
         const modelResponse = await fetch('http://localhost:11434/api/tags');
         if (!modelResponse.ok) {
+            console.error('Failed to fetch models:', modelResponse.status);
             showSetupWizard();
             return false;
         }
         
         const data = await modelResponse.json();
+        console.log('Available models:', data.models);
+        
         if (!data.models.some(model => model.name === currentModel)) {
+            console.warn('Current model not found:', currentModel);
             showSetupWizard();
             return false;
         }
         
+        console.log('Setup check completed successfully');
         return true;
     } catch (error) {
         console.error('Setup check failed:', error);
@@ -63,7 +74,11 @@ async function checkSetupStatus() {
 
 // Show setup wizard
 function showSetupWizard() {
-    if (setupWizardFrame) return;
+    console.log('Showing setup wizard');
+    if (setupWizardFrame) {
+        console.log('Setup wizard already showing');
+        return;
+    }
     
     setupWizardFrame = document.createElement('iframe');
     setupWizardFrame.src = chrome.runtime.getURL('components/setup-wizard.html');
@@ -78,6 +93,7 @@ function showSetupWizard() {
         z-index: 1000;
     `;
     document.body.appendChild(setupWizardFrame);
+    console.log('Setup wizard frame added to document');
 }
 
 // Listen for setup completion
@@ -92,45 +108,437 @@ window.addEventListener('message', (event) => {
     }
 });
 
-// Initialize model selector
-async function initializeModelSelector() {
+// Add toast styles to show feedback
+const style = document.createElement('style');
+style.textContent = `
+    .toast {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 12px 24px;
+        border-radius: 6px;
+        color: white;
+        font-size: 14px;
+        z-index: 1000;
+        animation: fadeInOut 3s ease;
+    }
+    
+    .toast.success {
+        background: #4caf50;
+    }
+    
+    .toast.error {
+        background: #f44336;
+    }
+    
+    @keyframes fadeInOut {
+        0% { opacity: 0; transform: translate(-50%, 20px); }
+        10% { opacity: 1; transform: translate(-50%, 0); }
+        90% { opacity: 1; transform: translate(-50%, 0); }
+        100% { opacity: 0; transform: translate(-50%, -20px); }
+    }
+
+    .api-provider.has-key .provider-info::after {
+        content: "✓";
+        color: #4caf50;
+        margin-left: auto;
+        font-weight: bold;
+    }
+
+    .remove-key {
+        background: #f44336;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-left: 8px;
+        display: none;
+    }
+
+    .api-provider.has-key .remove-key {
+        display: inline-block;
+    }
+
+    .remove-key:hover {
+        background: #d32f2f;
+    }
+`;
+document.head.appendChild(style);
+
+// Show toast messages
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    // Remove toast after animation
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', async () => {
     try {
-        const response = await fetch('http://localhost:11434/api/tags');
-        if (!response.ok) {
-            throw new Error('Failed to fetch models');
-        }
-        const data = await response.json();
-        
-        // Clear loading option
-        modelSelector.innerHTML = '';
-        
-        // Add available models
-        data.models.forEach(model => {
-            const option = document.createElement('option');
-            option.value = model.name;
-            option.textContent = model.name;
-            if (model.name === currentModel) {
-                option.selected = true;
-            }
-            modelSelector.appendChild(option);
+        // Add click handlers for save buttons
+        document.querySelectorAll('.save-key').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const provider = e.target.closest('.api-provider').querySelector('.key-input').dataset.provider;
+                await handleApiKeySave(provider);
+            });
         });
 
-        // Show/hide Ollama logo based on current model
-        ollamaLogo.style.display = isLocalModel(currentModel) ? 'block' : 'none';
+        // Add click handlers for remove buttons
+        document.querySelectorAll('.remove-key').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const provider = e.target.closest('.api-provider').querySelector('.key-input').dataset.provider;
+                await handleApiKeyRemove(provider);
+            });
+        });
+
+        // Add enter key handler for input fields
+        document.querySelectorAll('.key-input').forEach(input => {
+            input.addEventListener('keypress', async (e) => {
+                if (e.key === 'Enter') {
+                    const provider = input.dataset.provider;
+                    await handleApiKeySave(provider);
+                }
+            });
+        });
+
+        // Initialize provider statuses
+        const providers = ['openai', 'anthropic', 'openrouter', 'perplexity', 'gemini'];
+        for (const provider of providers) {
+            await updateProviderStatus(provider);
+        }
+        
+        // Initialize model selector and setup wizard
+        const isSetup = await checkSetupStatus();
+        if (isSetup) {
+            await initializeModelSelector();
+        }
+        
+        addEditModelsButton();
     } catch (error) {
-        console.error('Error loading models:', error);
-        modelSelector.innerHTML = '<option value="error">Error loading models</option>';
-        ollamaLogo.style.display = 'none';
-        // Show setup wizard if there's an error
-        showSetupWizard();
+        console.error('Initialization error:', error);
+        showToast('Failed to initialize. Please check if Ollama is running.', 'error');
+    }
+});
+
+// Update the handleApiKeySave function to properly show/hide UI elements
+async function handleApiKeySave(provider) {
+    const input = document.querySelector(`input[data-provider="${provider}"]`);
+    if (!input || !input.value.trim()) {
+        showToast('Please enter an API key', 'error');
+        return;
+    }
+
+    const apiKeyInput = input.closest('.api-key-input');
+    const saveButton = apiKeyInput.querySelector('.save-key');
+    const originalText = saveButton.textContent;
+
+    try {
+        const apiKey = input.value.trim();
+        
+        // Show loading state
+        saveButton.textContent = 'Validating...';
+        saveButton.disabled = true;
+
+        // First validate the key
+        const isValid = await validateApiKey(provider, apiKey);
+        if (!isValid) {
+            throw new Error('Invalid API key format');
+        }
+        
+        // Save the key if validation passed
+        await ApiKeyManager.saveApiKey(provider, apiKey);
+        
+        // Get available models
+        const models = await getProviderModels(provider);
+        if (!models || models.length === 0) {
+            throw new Error('No models available for this API key');
+        }
+        
+        // Update checkmark
+        await updateProviderStatus(provider);
+        showToast(`${provider} API key saved successfully!`);
+        
+        // Save all models as enabled by default
+        await ApiKeyManager.saveEnabledModels(provider, models.map(m => m.id));
+        
+        // Update the model selector
+        await initializeModelSelector();
+        
+        // Close the dropdown
+        apiKeyInput.classList.remove('show');
+        
+    } catch (error) {
+        console.error(`Error saving API key for ${provider}:`, error);
+        showToast(`Error: ${error.message}`, 'error');
+        saveButton.textContent = originalText;
+        saveButton.disabled = false;
+        // Remove the API key and checkmark if validation failed
+        await ApiKeyManager.deleteApiKey(provider);
+        await updateProviderStatus(provider);
     }
 }
 
-// Model selection change handler
-modelSelector.addEventListener('change', (e) => {
+// Validate API key and fetch available models
+async function validateApiKey(provider, apiKey) {
+    switch (provider) {
+        case 'openai':
+            const response = await fetch('https://api.openai.com/v1/models', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'omit'
+            });
+            
+            if (!response.ok) {
+                if (response.status === 401) {
+                    throw new Error('Invalid API key');
+                }
+                throw new Error(`API error: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            const availableModels = data.data.filter(model => {
+                const id = model.id.toLowerCase();
+                return (
+                    id.startsWith('o') ||
+                    id.includes('gpt-4o') ||
+                    id.includes('gpt-4') ||
+                    id.includes('gpt-3.5') ||
+                    id.match(/gpt-[5-9]/)
+                ) && !id.includes('instruct');
+            });
+            
+            if (availableModels.length === 0) {
+                throw new Error('No supported models available for this API key');
+            }
+            
+            return true;
+            
+        // Add other providers here
+        default:
+            throw new Error('Provider not supported');
+    }
+}
+
+async function updateProviderStatus(provider) {
+    const hasKey = await ApiKeyManager.hasApiKey(provider);
+    const providerElement = document.querySelector(`.api-provider[data-provider="${provider}"]`);
+    if (providerElement) {
+        providerElement.classList.toggle('has-key', hasKey);
+    }
+}
+
+// Update model selector to include API models
+async function initializeModelSelector() {
+    try {
+        console.log('Initializing model selector...');
+        // Clear existing options
+        modelSelector.innerHTML = '';
+        
+        // Get local models from Ollama
+        try {
+            const response = await fetch('http://localhost:11434/api/tags');
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Local models found:', data.models);
+                
+                // Add local models
+                const localModelsOptgroup = document.createElement('optgroup');
+                localModelsOptgroup.label = 'Local Models';
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = `local:${model.name}`;
+                    option.textContent = model.name;
+                    if (model.name === currentModel) {
+                        option.selected = true;
+                    }
+                    localModelsOptgroup.appendChild(option);
+                });
+                modelSelector.appendChild(localModelsOptgroup);
+            }
+        } catch (error) {
+            console.warn('Could not fetch local models:', error);
+        }
+        
+        // Add API models based on saved keys
+        const providers = await ApiKeyManager.getAllProviders();
+        console.log('Found providers with keys:', providers);
+        
+        if (providers.length > 0) {
+            const apiModelsOptgroup = document.createElement('optgroup');
+            apiModelsOptgroup.label = 'API Models';
+            
+            // Add models for each provider
+            for (const provider of providers) {
+                console.log(`Fetching models for ${provider}...`);
+                const enabledModels = await ApiKeyManager.getEnabledModels(provider);
+                console.log(`Enabled models for ${provider}:`, enabledModels);
+                
+                if (enabledModels.length > 0) {
+                    const availableModels = await getProviderModels(provider);
+                    console.log(`Available models for ${provider}:`, availableModels);
+                    
+                    if (!availableModels || availableModels.length === 0) {
+                        console.error(`No available models found for ${provider}`);
+                        continue;
+                    }
+                    
+                    const filteredModels = availableModels.filter(model => enabledModels.includes(model.id));
+                    console.log(`Filtered models for ${provider}:`, filteredModels);
+                    
+                    filteredModels.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = `${provider}:${model.id}`;
+                        option.textContent = `${model.name} (${provider})`;
+                        apiModelsOptgroup.appendChild(option);
+                    });
+                }
+            }
+            
+            if (apiModelsOptgroup.children.length > 0) {
+                modelSelector.appendChild(apiModelsOptgroup);
+            }
+        }
+        
+        // If no models are available, show error
+        if (modelSelector.children.length === 0) {
+            console.error('No models available in selector');
+            const option = document.createElement('option');
+            option.value = 'none';
+            option.textContent = 'No models available';
+            modelSelector.appendChild(option);
+            showToast('No models available. Please check your configuration.', 'error');
+        }
+        
+        // Update Ollama logo visibility
+        const [provider] = currentModel.split(':');
+        ollamaLogo.style.display = provider === 'local' ? 'block' : 'none';
+        
+    } catch (error) {
+        console.error('Error initializing model selector:', error);
+        modelSelector.innerHTML = '<option value="error">Error loading models</option>';
+        ollamaLogo.style.display = 'none';
+        showToast('Failed to load models. Please check your configuration.', 'error');
+    }
+}
+
+// Get available models for each provider
+async function getProviderModels(provider) {
+    if (provider === 'openai') {
+        try {
+            const apiKey = await ApiKeyManager.getApiKey('openai');
+            if (!apiKey) {
+                console.error('OpenAI API key not found');
+                return [];
+            }
+
+            console.log('Fetching OpenAI models...');
+            const response = await fetch('https://api.openai.com/v1/models', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'omit'
+            });
+
+            if (!response.ok) {
+                console.error('Failed to fetch OpenAI models:', response.status);
+                return [];
+            }
+
+            const data = await response.json();
+            
+            // Filter for all supported model families
+            const supportedModels = data.data.filter(model => {
+                const id = model.id.toLowerCase();
+                // Include all current and future model families
+                return (
+                    // o-series models (reasoning models)
+                    id.startsWith('o') ||
+                    // GPT-4o (Omni) models
+                    id.includes('gpt-4o') ||
+                    // GPT-4 models (including Turbo and Vision)
+                    id.includes('gpt-4') ||
+                    // GPT-3.5 models
+                    id.includes('gpt-3.5') ||
+                    // Future GPT models (5+)
+                    id.match(/gpt-[5-9]/)
+                ) && (
+                    // Exclude instruction-only models
+                    !id.includes('instruct')
+                );
+            }).map(model => ({
+                id: model.id,
+                // Keep version numbers and capabilities in the display name
+                name: model.id
+                    .replace(/^gpt-/i, 'GPT-')  // Capitalize GPT
+                    .replace(/^o([0-9])/, 'O$1')  // Capitalize O-series
+                    .replace(/-/g, ' ')  // Replace hyphens with spaces
+                    .trim()
+            }));
+            
+            console.log('Available OpenAI models:', supportedModels);
+            return supportedModels;
+        } catch (error) {
+            console.error('Error fetching OpenAI models:', error);
+            return [];
+        }
+    }
+
+    // Fallback static lists for other providers
+    const models = {
+        anthropic: [
+            { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
+            { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet' },
+            { id: 'claude-2.1', name: 'Claude 2.1' }
+        ],
+        openrouter: [
+            { id: 'openai/gpt-4-turbo-preview', name: 'GPT-4 Turbo (OpenRouter)' },
+            { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus (OpenRouter)' },
+            { id: 'google/gemini-pro', name: 'Gemini Pro (OpenRouter)' }
+        ],
+        perplexity: [
+            { id: 'pplx-70b-online', name: 'Perplexity 70B' },
+            { id: 'pplx-7b-online', name: 'Perplexity 7B' }
+        ],
+        gemini: [
+            { id: 'gemini-pro', name: 'Gemini Pro' },
+            { id: 'gemini-pro-vision', name: 'Gemini Pro Vision' }
+        ]
+    };
+    
+    return models[provider] || [];
+}
+
+// Update model selection handler
+modelSelector.addEventListener('change', async (e) => {
     currentModel = e.target.value;
+    const [provider] = currentModel.split(':');
+    
     // Update Ollama logo visibility
-    ollamaLogo.style.display = isLocalModel(currentModel) ? 'block' : 'none';
+    ollamaLogo.style.display = provider === 'local' ? 'block' : 'none';
+    
+    // Verify API key if needed
+    if (provider !== 'local') {
+        const hasKey = await ApiKeyManager.hasApiKey(provider);
+        if (!hasKey) {
+            showToast(`Please add your ${provider} API key first`, 'error');
+            // Reset to previous selection
+            initializeModelSelector();
+            return;
+        }
+    }
 });
 
 // Handle image paste
@@ -413,14 +821,6 @@ Let's break this down:`;
     }
 });
 
-// Initial setup check
-window.addEventListener('load', async () => {
-    const isSetup = await checkSetupStatus();
-    if (isSetup) {
-        initializeModelSelector();
-    }
-});
-
 // Settings menu functionality
 const settingsButton = document.getElementById('settings-button');
 const settingsMenu = document.getElementById('settings-menu');
@@ -431,17 +831,34 @@ const apiKeyDropdown = document.getElementById('api-key-dropdown');
 // Toggle settings menu
 settingsButton.addEventListener('click', (e) => {
     e.stopPropagation();
-    settingsMenu.classList.toggle('show');
-    // Hide API key dropdown when closing settings menu
-    if (!settingsMenu.classList.contains('show')) {
+    const isVisible = settingsMenu.classList.contains('show');
+    // Close any open dropdowns first
+    document.querySelectorAll('.settings-menu, .api-key-dropdown').forEach(el => {
+        el.classList.remove('show');
+    });
+    if (!isVisible) {
+        settingsMenu.classList.add('show');
+    }
+});
+
+// Close menus when clicking outside
+document.addEventListener('click', (e) => {
+    if (!settingsButton.contains(e.target) && 
+        !settingsMenu.contains(e.target) && 
+        !addApiKeyButton.contains(e.target) && 
+        !apiKeyDropdown.contains(e.target)) {
+        settingsMenu.classList.remove('show');
         apiKeyDropdown.classList.remove('show');
     }
 });
 
-// Close menu when clicking outside
-document.addEventListener('click', (e) => {
-    if (!settingsMenu.contains(e.target) && !settingsButton.contains(e.target)) {
-        settingsMenu.classList.remove('show');
+// Toggle API key dropdown
+addApiKeyButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isVisible = apiKeyDropdown.classList.contains('show');
+    if (!isVisible) {
+        apiKeyDropdown.classList.add('show');
+    } else {
         apiKeyDropdown.classList.remove('show');
     }
 });
@@ -451,12 +868,6 @@ launchLocalButton.addEventListener('click', () => {
     const command = 'OLLAMA_ORIGINS="chrome-extension://*" ollama serve';
     console.log('Launch local command:', command);
     settingsMenu.classList.remove('show');
-});
-
-// Toggle API key dropdown
-addApiKeyButton.addEventListener('click', (e) => {
-    e.stopPropagation();
-    apiKeyDropdown.classList.toggle('show');
 });
 
 // Handle provider click to show/hide input
@@ -480,39 +891,197 @@ document.querySelectorAll('.provider-info').forEach(providerInfo => {
     });
 });
 
-// Handle API key saving
-document.querySelectorAll('.save-key').forEach(button => {
-    button.addEventListener('click', (e) => {
-        const provider = e.target.closest('.api-provider');
-        const keyInput = provider.querySelector('.key-input');
-        const apiKey = keyInput.value.trim();
-        const providerId = keyInput.dataset.provider;
+// Add Edit Models button to settings menu
+function addEditModelsButton() {
+    const settingsMenu = document.getElementById('settings-menu');
+    const addApiKeyButton = document.getElementById('add-api-key');
+    
+    // Create Edit Models button if it doesn't exist
+    if (!document.getElementById('edit-models')) {
+        const editModelsButton = document.createElement('button');
+        editModelsButton.id = 'edit-models';
+        editModelsButton.className = 'settings-item';
+        editModelsButton.innerHTML = `
+            Edit Models
+            <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        `;
         
-        if (apiKey) {
-            // Save API key to storage
-            chrome.storage.sync.set({
-                [`${providerId}_api_key`]: apiKey
-            }, () => {
-                console.log(`Saved API key for ${providerId}`);
-                keyInput.value = '';
-                provider.querySelector('.api-key-input').classList.remove('show');
-                // You might want to show a success message here
-            });
+        // Insert before Add API Key button
+        settingsMenu.insertBefore(editModelsButton, addApiKeyButton);
+        
+        // Add click handler
+        editModelsButton.addEventListener('click', showModelEditor);
+    }
+}
+
+// Show model editor
+async function showModelEditor() {
+    const providers = ['openai', 'anthropic', 'openrouter', 'perplexity', 'gemini'];
+    const modelEditor = document.createElement('div');
+    modelEditor.className = 'model-editor';
+    
+    // Get enabled models for each provider
+    const providerModels = await Promise.all(providers.map(async provider => {
+        const hasKey = await ApiKeyManager.hasApiKey(provider);
+        if (!hasKey) return null;
+        
+        const enabledModels = await ApiKeyManager.getEnabledModels(provider);
+        const availableModels = await getProviderModels(provider);
+        return { provider, enabledModels, availableModels };
+    }));
+    
+    // Filter out providers without keys
+    const activeProviders = providerModels.filter(Boolean);
+    
+    modelEditor.innerHTML = `
+        <div class="model-editor-content">
+            <h2>Edit Enabled Models</h2>
+            ${activeProviders.map(({ provider, enabledModels, availableModels }) => `
+                <div class="provider-models">
+                    <h3>${provider.charAt(0).toUpperCase() + provider.slice(1)}</h3>
+                    <div class="model-list">
+                        ${availableModels.map(model => `
+                            <label class="model-option">
+                                <input type="checkbox" 
+                                       data-provider="${provider}"
+                                       data-model="${model.id}"
+                                       ${enabledModels.includes(model.id) ? 'checked' : ''}>
+                                <span>${model.name}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('')}
+            <div class="model-editor-actions">
+                <button class="save-all-models">Save Changes</button>
+                <button class="close-editor">Cancel</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modelEditor);
+    
+    // Add event listeners
+    const saveAllButton = modelEditor.querySelector('.save-all-models');
+    const closeButton = modelEditor.querySelector('.close-editor');
+    
+    saveAllButton.addEventListener('click', async () => {
+        for (const provider of providers) {
+            const checkboxes = modelEditor.querySelectorAll(`input[data-provider="${provider}"]`);
+            const selectedModels = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.dataset.model);
+            
+            if (selectedModels.length > 0) {
+                await ApiKeyManager.saveEnabledModels(provider, selectedModels);
+            }
         }
+        
+        showToast('Models updated successfully!');
+        await initializeModelSelector();
+        modelEditor.remove();
     });
+    
+    closeButton.addEventListener('click', () => {
+        modelEditor.remove();
+    });
+}
+
+// Add styles for new UI elements
+const modelStyles = document.createElement('style');
+modelStyles.textContent = `
+    .model-selection {
+        padding: 16px;
+    }
+    
+    .model-list {
+        margin: 12px 0;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    
+    .model-option {
+        display: flex;
+        align-items: center;
+        margin: 8px 0;
+        cursor: pointer;
+    }
+    
+    .model-option input[type="checkbox"] {
+        margin-right: 8px;
+    }
+    
+    .model-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 16px;
+    }
+    
+    .model-editor {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+    
+    .model-editor-content {
+        background: white;
+        padding: 24px;
+        border-radius: 8px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    .provider-models {
+        margin: 16px 0;
+    }
+    
+    .model-editor-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 24px;
+    }
+    
+    button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+`;
+document.head.appendChild(modelStyles);
+
+// Initialize edit models button
+document.addEventListener('DOMContentLoaded', () => {
+    addEditModelsButton();
 });
 
-// Load saved API keys on startup
-window.addEventListener('load', () => {
-    chrome.storage.sync.get(null, (items) => {
-        // For each provider, check if we have a saved key
-        document.querySelectorAll('.key-input').forEach(input => {
-            const providerId = input.dataset.provider;
-            const key = items[`${providerId}_api_key`];
-            if (key) {
-                // Maybe show some indication that the key is saved
-                input.closest('.api-provider').classList.add('has-key');
-            }
-        });
-    });
-}); 
+// Add function to handle API key removal
+async function handleApiKeyRemove(provider) {
+    try {
+        await ApiKeyManager.deleteApiKey(provider);
+        await ApiKeyManager.clearEnabledModels(provider);
+        await updateProviderStatus(provider);
+        await initializeModelSelector();
+        showToast(`${provider} API key removed successfully`);
+        
+        // Reset the input field
+        const input = document.querySelector(`input[data-provider="${provider}"]`);
+        if (input) {
+            input.value = '';
+        }
+    } catch (error) {
+        console.error('Error removing API key:', error);
+        showToast(`Error removing ${provider} API key`, 'error');
+    }
+} 
