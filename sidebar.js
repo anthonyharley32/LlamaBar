@@ -615,146 +615,36 @@ try {
 
     // Add message to chat
     function addMessage(type, content) {
-        console.log('🎯 Adding message:', {
-            type,
-            hasContent: !!content,
-            contentLength: content?.length,
-            chatContainer: {
-                exists: !!document.getElementById('chat-messages'),
-                html: document.getElementById('chat-messages')?.outerHTML,
-                childCount: document.getElementById('chat-messages')?.children.length
-            }
-        });
-
-        // Ensure chat container exists
-        const chatContainer = document.getElementById('chat-messages');
-        if (!chatContainer) {
-            console.error('❌ Chat container not found');
-            console.error('Document state:', {
-                body: document.body.innerHTML,
-                hasContainer: !!document.querySelector('.chat-container')
-            });
-            return null;
-        }
-
-        // Hide welcome message when first message is added
-        const welcomeMessage = chatContainer.querySelector('.welcome-message');
-        if (welcomeMessage) {
-            console.log('🗑️ Removing welcome message:', {
-                welcomeHTML: welcomeMessage.outerHTML,
-                chatContainerBefore: chatContainer.outerHTML
-            });
-            welcomeMessage.style.opacity = '0';
-            welcomeMessage.style.transition = 'opacity 0.3s ease';
-            setTimeout(() => {
-                welcomeMessage.remove();
-                console.log('Welcome message removed, chat container:', chatContainer.outerHTML);
-            }, 300);
-        }
-
-        // Create message container
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${type}-message`;
-        messageDiv.style.cssText = `
-            display: block !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            height: auto !important;
-            min-height: 20px !important;
-            position: relative !important;
-            z-index: 1 !important;
-        `;
         
-        console.log('Created message div:', {
-            element: messageDiv.outerHTML,
-            styles: messageDiv.style.cssText,
-            computedStyles: {
-                display: window.getComputedStyle(messageDiv).display,
-                visibility: window.getComputedStyle(messageDiv).visibility,
-                opacity: window.getComputedStyle(messageDiv).opacity
+        if (type === 'assistant') {
+            // Clear any existing currentAssistantMessage
+            if (currentAssistantMessage) {
+                currentAssistantMessage.style.marginBottom = '16px';
             }
-        });
-        
-        // Create content paragraph
-        const p = document.createElement('p');
-        p.style.cssText = `
-            margin: 0;
-            padding: 0;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            display: block !important;
-        `;
-        
-        console.log('Created paragraph:', {
-            element: p.outerHTML,
-            styles: p.style.cssText
-        });
-        
-        if (type === 'assistant' && !content) {
-            console.log('📝 Creating empty paragraph for streaming');
+            currentAssistantMessage = messageDiv;
         } else {
-            console.log('📝 Setting initial content');
-            if (markdownEnabled && marked && content) {
-                console.log('Applying markdown to content');
-                try {
-                    const parsedContent = marked.parse(content);
-                    console.log('Markdown parsed:', {
-                        success: !!parsedContent,
-                        length: parsedContent?.length
-                    });
-                    p.innerHTML = parsedContent;
-                } catch (error) {
-                    console.error('Markdown parsing failed:', error);
-                    p.textContent = content;
-                }
-            } else {
-                p.textContent = content || '';
+            // For user messages, ensure proper spacing
+            if (currentAssistantMessage) {
+                currentAssistantMessage.style.marginBottom = '16px';
             }
         }
         
-        // Assemble message
-        messageDiv.appendChild(p);
-        console.log('Message assembled:', messageDiv.outerHTML);
-        
-        console.log('➕ Chat container before append:', chatContainer.outerHTML);
-        chatContainer.appendChild(messageDiv);
-        console.log('➕ Chat container after append:', chatContainer.outerHTML);
-        
-        // Ensure visibility and scroll
-        messageDiv.style.display = 'block';
-        
-        // Force reflow
-        void messageDiv.offsetHeight;
-        
-        requestAnimationFrame(() => {
-            const beforeScroll = chatContainer.scrollTop;
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-            console.log('⬇️ Scrolled chat:', {
-                before: beforeScroll,
-                after: chatContainer.scrollTop,
-                scrollHeight: chatContainer.scrollHeight,
-                containerHeight: chatContainer.clientHeight,
-                messageVisible: messageDiv.offsetParent !== null
-            });
-        });
-        
-        console.log('✅ Message added successfully:', {
-            type,
-            hasContent: !!content,
-            inDOM: !!messageDiv.parentElement,
-            className: messageDiv.className,
-            paragraphExists: !!messageDiv.querySelector('p'),
-            computedStyles: {
-                display: window.getComputedStyle(messageDiv).display,
-                visibility: window.getComputedStyle(messageDiv).visibility,
-                opacity: window.getComputedStyle(messageDiv).opacity,
-                height: window.getComputedStyle(messageDiv).height
-            },
-            chatContainer: {
-                childCount: chatContainer.children.length,
-                lastChild: chatContainer.lastElementChild === messageDiv
+        // Handle markdown formatting if enabled
+        if (type === 'assistant' && markdownEnabled && typeof marked !== 'undefined') {
+            try {
+                messageDiv.innerHTML = marked.parse(content);
+            } catch (error) {
+                console.error('Markdown parsing failed:', error);
+                messageDiv.textContent = content;
             }
-        });
+        } else {
+            messageDiv.textContent = content;
+        }
+        
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
         
         return messageDiv;
     }
@@ -860,11 +750,7 @@ try {
             success: message.success,
             contentLength: message.response?.length,
             isDone: message.done,
-            hasError: !!message.error,
-            currentState: {
-                hasAssistantMessage: !!currentAssistantMessage,
-                assistantMessageHTML: currentAssistantMessage?.outerHTML
-            }
+            hasError: !!message.error
         });
 
         if (!message.success) {
@@ -879,20 +765,29 @@ try {
         }
 
         try {
+            const chatContainer = document.getElementById('chat-messages');
+            
             // Create new message if none exists
             if (!currentAssistantMessage) {
+                // First, ensure proper spacing by adding margin to the last message
+                const messages = chatContainer.querySelectorAll('.message');
+                if (messages.length > 0) {
+                    const lastMessage = messages[messages.length - 1];
+                    lastMessage.style.marginBottom = '16px';
+                }
+
                 console.log('📝 Creating new assistant message');
                 currentAssistantMessage = addMessage('assistant');
+                currentAssistantMessage.dataset.content = '';
+                
+                // Ensure the new message is properly positioned
+                currentAssistantMessage.style.position = 'relative';
+                currentAssistantMessage.style.marginTop = '16px';
+                currentAssistantMessage.style.marginBottom = '16px';
                 
                 if (!currentAssistantMessage) {
                     throw new Error('Failed to create assistant message element');
                 }
-                
-                console.log('✅ New message created:', {
-                    element: currentAssistantMessage.outerHTML,
-                    isVisible: currentAssistantMessage.offsetParent !== null,
-                    styles: window.getComputedStyle(currentAssistantMessage)
-                });
             }
 
             // Get or create paragraph element
@@ -906,53 +801,49 @@ try {
                     white-space: pre-wrap;
                     word-wrap: break-word;
                     display: block !important;
+                    position: relative;
+                    z-index: 1;
                 `;
                 currentAssistantMessage.appendChild(p);
-                
-                console.log('✅ New paragraph created:', {
-                    element: p.outerHTML,
-                    isVisible: p.offsetParent !== null,
-                    styles: window.getComputedStyle(p)
-                });
             }
+
+            // Store the previous scroll position and height
+            const previousScrollTop = chatContainer.scrollTop;
+            const previousScrollHeight = chatContainer.scrollHeight;
+
+            // Accumulate content
+            const newContent = message.response;
+            currentAssistantMessage.dataset.content = newContent;
 
             // Update content
             if (markdownEnabled && marked) {
-                console.log('📝 Applying markdown to response');
                 try {
-                    const parsedContent = marked.parse(message.response);
+                    const parsedContent = marked.parse(newContent);
                     p.innerHTML = parsedContent;
-                    console.log('✅ Markdown applied:', {
-                        rawLength: message.response.length,
-                        parsedLength: parsedContent.length,
-                        resultHTML: p.outerHTML
-                    });
                 } catch (error) {
                     console.error('❌ Markdown parsing failed:', error);
-                    p.textContent = message.response;
+                    p.textContent = newContent;
                 }
             } else {
-                p.textContent = message.response;
+                p.textContent = newContent;
             }
 
-            // Force reflow and ensure visibility
-            void currentAssistantMessage.offsetHeight;
+            // Ensure proper visibility and layout
             currentAssistantMessage.style.display = 'block';
             p.style.display = 'block';
 
-            // Scroll into view
+            // Calculate new scroll position
+            const newScrollHeight = chatContainer.scrollHeight;
+            const heightDifference = newScrollHeight - previousScrollHeight;
+            
+            // Smooth scroll handling
             requestAnimationFrame(() => {
-                const chatContainer = document.getElementById('chat-messages');
-                if (chatContainer) {
-                    const beforeScroll = chatContainer.scrollTop;
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                    console.log('⬇️ Scrolled chat:', {
-                        before: beforeScroll,
-                        after: chatContainer.scrollTop,
-                        scrollHeight: chatContainer.scrollHeight,
-                        containerHeight: chatContainer.clientHeight,
-                        messageVisible: currentAssistantMessage.offsetParent !== null
-                    });
+                // If user has scrolled up, maintain their position
+                if (previousScrollTop + chatContainer.clientHeight < previousScrollHeight) {
+                    chatContainer.scrollTop = previousScrollTop;
+                } else {
+                    // If at bottom, scroll to new content
+                    chatContainer.scrollTop = newScrollHeight;
                 }
             });
 
@@ -962,10 +853,7 @@ try {
                 currentAssistantMessage = null;
             }
         } catch (error) {
-            console.error('❌ Error handling model response:', error, {
-                message,
-                currentAssistantMessage: currentAssistantMessage?.outerHTML
-            });
+            console.error('❌ Error handling model response:', error);
             showError('An error occurred while displaying the response');
         }
     }

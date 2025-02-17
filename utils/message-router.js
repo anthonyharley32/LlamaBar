@@ -6,13 +6,17 @@ const MIN_TIME_BETWEEN_UPDATES = 50; // Milliseconds - reduced for smoother stre
 
 export class MessageRouter {
     static async routeModelRequest(message, port = null, sendResponse = null) {
+        // Send initial response immediately to keep channel open
+        if (sendResponse) {
+            sendResponse({ success: true, streaming: true });
+        }
+
         try {
             let provider, modelId;
             
-            // Special handling for local models to preserve full model name
             if (message.model.startsWith('local:')) {
                 provider = 'local';
-                modelId = message.model.substring(6); // Remove 'local:' prefix
+                modelId = message.model.substring(6);
             } else {
                 [provider, modelId] = message.model.split(':');
             }
@@ -44,120 +48,109 @@ export class MessageRouter {
                 );
             }
 
+            if (!responseGenerator) {
+                throw new Error('No response generator returned from model service');
+            }
+
             // Handle streaming responses
-            if (responseGenerator && typeof responseGenerator[Symbol.asyncIterator] === 'function') {
+            if (typeof responseGenerator[Symbol.asyncIterator] === 'function') {
                 let messageStarted = false;
                 let chunkCount = 0;
                 let accumulatedContent = '';
                 let previousContent = '';
                 
-                // Send initial response to keep the message channel open
-                if (sendResponse) {
-                    sendResponse({ success: true, streaming: true });
-                }
-                
                 for await (const chunk of responseGenerator) {
+                    if (!chunk) continue;  // Skip empty chunks
+                    
                     chunkCount++;
-                    
-                    // Get the new content from the chunk
                     const newContent = chunk.response || chunk.content || '';
+                    if (!newContent) continue;  // Skip empty content
                     
-                    // Calculate the actual delta (only the new content)
                     const deltaContent = newContent.slice(previousContent.length);
-                    previousContent = newContent;
+                    if (!deltaContent) continue;  // Skip if no new content
                     
-                    // Normalize response format to match OpenAI's delta pattern
+                    previousContent = newContent;
+                    accumulatedContent = newContent;
+
+                    if (!messageStarted) {
+                        messageStarted = true;
+                        console.log('Started receiving content');
+                    }
+                    
+                    console.log('Streaming delta:', {
+                        chunkCount,
+                        deltaContent,
+                        totalLength: accumulatedContent.length,
+                        isDone: chunk.done || false
+                    });
+                    
                     const response = {
                         type: 'MODEL_RESPONSE',
-                        success: chunk.success ?? true,
-                        delta: {
-                            content: deltaContent
-                        },
-                        response: newContent,
+                        success: true,
+                        delta: { content: deltaContent },
+                        response: accumulatedContent,
                         done: chunk.done || false
                     };
 
-                    if (deltaContent) {
-                        if (!messageStarted) {
-                            messageStarted = true;
-                            console.log('Started receiving content');
+                    try {
+                        if (port) {
+                            port.postMessage(response);
+                        } else {
+                            chrome.runtime.sendMessage(response);
                         }
-                        
-                        accumulatedContent = newContent;
-                        
-                        console.log('Streaming delta:', {
-                            chunkCount,
-                            deltaContent,
-                            totalLength: accumulatedContent.length,
-                            isDone: response.done
+                    } catch (error) {
+                        console.warn('Error sending delta:', error);
+                        // Don't break the stream on send error
+                    }
+                    
+                    if (chunk.done) {
+                        console.log('Stream complete:', {
+                            totalChunks: chunkCount,
+                            finalLength: accumulatedContent.length
                         });
-                        
-                        try {
-                            if (port) {
-                                port.postMessage(response);
-                            } else {
-                                chrome.runtime.sendMessage(response);
-                            }
-                        } catch (error) {
-                            console.warn('Error sending delta:', error);
-                            // Continue streaming despite errors
-                        }
-                        
-                        if (response.done) {
-                            console.log('Stream complete:', {
-                                totalChunks: chunkCount,
-                                finalLength: accumulatedContent.length
-                            });
-                            break;
-                        }
+                        break;
                     }
                 }
-                
-                // Send final message with complete content
-                const finalResponse = {
-                    type: 'MODEL_RESPONSE',
-                    success: true,
-                    delta: {
-                        content: ''  // Empty delta for final message
-                    },
-                    response: accumulatedContent,
-                    done: true
-                };
-                
-                try {
-                    if (port) {
-                        port.postMessage(finalResponse);
-                    } else {
-                        chrome.runtime.sendMessage(finalResponse);
+
+                // Only send final message if we actually got content
+                if (accumulatedContent) {
+                    const finalResponse = {
+                        type: 'MODEL_RESPONSE',
+                        success: true,
+                        delta: { content: '' },
+                        response: accumulatedContent,
+                        done: true
+                    };
+                    
+                    try {
+                        if (port) {
+                            port.postMessage(finalResponse);
+                        } else {
+                            chrome.runtime.sendMessage(finalResponse);
+                        }
+                    } catch (error) {
+                        console.error('Failed to send final message:', error);
                     }
-                } catch (error) {
-                    console.error('Failed to send final message:', error);
                 }
-                
-                return true;
-            }
-            
-            // Handle non-streaming response
-            if (responseGenerator) {
+            } else {
+                // Handle non-streaming response
+                const content = responseGenerator.response || responseGenerator.content;
+                if (!content) {
+                    throw new Error('Empty response received from model');
+                }
+
                 const response = {
                     type: 'MODEL_RESPONSE',
-                    success: responseGenerator.success ?? true,
-                    response: responseGenerator.response || responseGenerator.content || '',
+                    success: true,
+                    response: content,
                     done: true
                 };
-                
-                if (!response.response) {
-                    throw new Error('Empty response received');
-                }
                 
                 try {
                     if (port) {
                         port.postMessage(response);
                     } else {
                         chrome.runtime.sendMessage(response);
-                    }
-                    if (sendResponse) {
-                        sendResponse({ success: true });
                     }
                 } catch (error) {
                     console.error('Failed to send response:', error);
@@ -179,9 +172,6 @@ export class MessageRouter {
                     port.postMessage(errorResponse);
                 } else {
                     chrome.runtime.sendMessage(errorResponse);
-                }
-                if (sendResponse) {
-                    sendResponse({ success: false, error: error.message });
                 }
             } catch (sendError) {
                 console.error('Failed to send error response:', sendError);

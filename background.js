@@ -116,44 +116,57 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     connections.delete(tabId);
 });
 
-// Handle messages from content scripts
+// Handle messages from the popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'SIDEBAR_STATE_CHANGED') {
-        isSidebarVisible = message.isVisible;
-        return false; // No async response needed
-    } else if (message.type === 'QUERY_OLLAMA') {
-        // Handle the initial response synchronously
-        MessageRouter.routeModelRequest(message, null, sendResponse)
-            .catch(error => {
-                console.error('Error routing model request:', error);
-                sendResponse({ success: false, error: error.message });
-            });
-        return true; // Will respond asynchronously
+    console.log('Received message:', { type: message.type, sender });
+    
+    if (message.type === 'QUERY_OLLAMA') {
+        // Handle the request asynchronously
+        try {
+            MessageRouter.routeModelRequest(message, null, sendResponse)
+                .catch(error => {
+                    console.error('Error routing model request:', error);
+                    sendResponse({ success: false, error: error.message });
+                });
+        } catch (error) {
+            console.error('Error initiating model request:', error);
+            sendResponse({ success: false, error: error.message });
+            return false;
+        }
+        
+        // Return true to indicate we will send a response asynchronously
+        return true;
     }
+    
     return false;
 });
 
-// Handle messages from the popup/side panel
-let port;
-chrome.runtime.onConnect.addListener((p) => {
-    port = p;
+// Handle long-lived connections
+chrome.runtime.onConnect.addListener((port) => {
+    console.log('New connection established:', port.name);
+    
     port.onMessage.addListener(async (message) => {
+        console.log('Received port message:', { type: message.type, port: port.name });
+        
         if (message.type === 'QUERY_OLLAMA') {
             try {
                 await MessageRouter.routeModelRequest(message, port);
             } catch (error) {
-                console.error('Error handling popup message:', error);
+                console.error('Error handling port message:', error);
                 port.postMessage({
                     type: 'MODEL_RESPONSE',
                     success: false,
-                    error: error.message
+                    error: error.message || 'Unknown error occurred'
                 });
             }
         }
     });
-
+    
     port.onDisconnect.addListener(() => {
-        port = null;
+        console.log('Port disconnected:', port.name);
+        if (chrome.runtime.lastError) {
+            console.warn('Port error:', chrome.runtime.lastError);
+        }
     });
 });
 
