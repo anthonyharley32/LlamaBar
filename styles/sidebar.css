@@ -757,41 +757,105 @@ textarea {
 
 .api-key-input {
     display: none;
-    padding: 0 16px 12px 16px;
-    gap: 8px;
+    padding: 8px;
+    background: #f5f5f5;
+    border-radius: 4px;
+    margin-top: 4px;
 }
 
 .api-key-input.show {
-    display: flex;
+    display: block;
 }
 
-.key-input {
-    flex: 1;
-    padding: 8px;
-    border: 1px solid var(--border-color);
+.api-key-input input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
     border-radius: 4px;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.key-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.key-actions button {
+    flex: 1;
+    padding: 4px 8px;
     font-size: 12px;
-    outline: none;
-    background-color: var(--background-color);
-}
-
-.key-input:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
-}
-
-.save-key {
-    padding: 8px 12px;
-    background: var(--primary-color);
-    color: white;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 12px;
-    white-space: nowrap;
-    transition: opacity 0.2s;
+    transition: background-color 0.2s;
+}
+
+.save-key {
+    background: #2196F3;
+    color: white;
 }
 
 .save-key:hover {
-    opacity: 0.9;
+    background: #1976D2;
+}
+
+.remove-key {
+    background: #f44336;
+    color: white;
+    display: none;
+}
+
+.api-provider.has-key .remove-key {
+    display: block;
+}
+
+.remove-key:hover {
+    background: #d32f2f;
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.api-provider {
+    border-bottom: 1px solid #eee;
+    padding: 8px 0;
+}
+
+.api-provider:last-child {
+    border-bottom: none;
+}
+
+.provider-info {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.provider-info:hover {
+    background: #f5f5f5;
+}
+
+.provider-info img {
+    width: 24px;
+    height: 24px;
+    margin-right: 8px;
+    border-radius: 4px;
+}
+
+.provider-info span {
+    flex-grow: 1;
+    font-size: 14px;
+}
+
+.api-provider.has-key .provider-info::after {
+    content: "✓";
+    color: #4caf50;
+    margin-left: 8px;
+    font-weight: bold;
 } 

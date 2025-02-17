@@ -16,7 +16,8 @@ export class ExternalModelService {
             'anthropic': this.handleAnthropic,
             'gemini': this.handleGemini,
             'perplexity': this.handlePerplexity,
-            'openrouter': this.handleOpenRouter
+            'openrouter': this.handleOpenRouter,
+            'grok': this.handleGrok
         };
         return handlers[provider];
     }
@@ -652,6 +653,95 @@ export class ExternalModelService {
             }
         } finally {
             reader.releaseLock();
+        }
+    }
+
+    static async handleGrok(modelId, prompt, options = {}) {
+        try {
+            console.log('🚀 Starting Grok request handler:', { modelId, hasImage: options.hasImage });
+            const apiKey = await ApiKeyManager.getApiKey('grok');
+            if (!apiKey) {
+                throw new Error('Grok API key not found');
+            }
+            console.log('✅ API key retrieved successfully');
+
+            // Update model ID to use latest version
+            const grokModel = options.hasImage ? 'grok-2-vision-1212' : 'grok-2-1212';
+
+            const messages = [];
+            if (options.hasImage) {
+                const base64Image = prompt.match(/<image>(.*?)<\/image>/)?.[1];
+                const text = prompt.replace(/<image>.*?<\/image>\n?/, '').trim();
+                
+                messages.push({
+                    role: 'user',
+                    content: [
+                        { type: 'text', text },
+                        base64Image ? {
+                            type: 'image_url',
+                            image_url: { url: base64Image }
+                        } : null
+                    ].filter(Boolean)
+                });
+            } else {
+                messages.push({
+                    role: 'user',
+                    content: prompt
+                });
+            }
+
+            console.log('📝 Preparing Grok API request:', {
+                model: grokModel,
+                messageCount: messages.length,
+                firstMessageContent: messages[0].content
+            });
+
+            const requestBody = {
+                model: grokModel,
+                messages,
+                stream: true
+            };
+
+            console.log('🌐 Making Grok API request with body:', JSON.stringify(requestBody));
+
+            try {
+                const response = await fetch('https://api.x.ai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'omit',
+                    body: JSON.stringify(requestBody)
+                });
+
+                console.log('📨 Received response from Grok:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries())
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('❌ Grok API error:', errorData);
+                    throw new Error(errorData.error?.message || `Grok API error: ${response.status}`);
+                }
+
+                return ExternalModelService.handleProviderStream(response, 'grok', (json) => {
+                    return json.choices?.[0]?.delta?.content || '';
+                });
+            } catch (error) {
+                console.error('❌ Fetch error:', {
+                    name: error.name,
+                    message: error.message,
+                    cause: error.cause
+                });
+                throw error;
+            }
+        } catch (error) {
+            console.error('💥 Error in handleGrok:', error);
+            throw error;
         }
     }
 } 

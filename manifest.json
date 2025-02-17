@@ -15,7 +15,8 @@
     "https://api.anthropic.com/*",
     "https://openrouter.ai/*",
     "https://api.perplexity.ai/*",
-    "https://generativelanguage.googleapis.com/*"
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.grok.x/*"
   ],
   "action": {
     "default_title": "LlamaBar",
@@ -43,6 +44,7 @@
         "assets/gemini.webp",
         "assets/perplexity.png",
         "assets/openrouter.jpeg",
+        "assets/grok.webp",
         "assets/icon16.jpg",
         "assets/icon48.jpg",
         "assets/icon128.jpg"
@@ -51,6 +53,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' http://localhost:11434 https://api.openai.com https://api.anthropic.com https://openrouter.ai https://api.perplexity.ai https://generativelanguage.googleapis.com"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' http://localhost:11434 https://api.openai.com https://api.anthropic.com https://openrouter.ai https://api.perplexity.ai https://generativelanguage.googleapis.com https://api.grok.x https://api.x.ai"
   }
 } 

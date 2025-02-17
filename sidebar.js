@@ -14,7 +14,8 @@ const logoMap = {
     'anthropic': 'claude.jpg',
     'gemini': 'gemini.webp',
     'perplexity': 'perplexity.png',
-    'openrouter': 'openrouter.jpeg'
+    'openrouter': 'openrouter.jpeg',
+    'grok': 'grok.webp'
 };
 
 // Wrap initialization in error handler
@@ -250,7 +251,7 @@ try {
             });
 
             // Initialize provider statuses
-            const providers = ['openai', 'anthropic', 'openrouter', 'perplexity', 'gemini'];
+            const providers = ['openai', 'anthropic', 'openrouter', 'perplexity', 'gemini', 'grok'];
             for (const provider of providers) {
                 await updateProviderStatus(provider);
             }
@@ -316,6 +317,21 @@ try {
             if (provider !== 'gemini') {
                 // Save all models as enabled by default
                 await ApiKeyManager.saveEnabledModels(provider, models.map(m => m.id));
+            } else {
+                // Save all Gemini models as enabled
+                await ApiKeyManager.saveEnabledModels('gemini', [
+                    // Gemini 2.0 Models
+                    'gemini-2.0-pro',
+                    'gemini-2.0-vision',
+                    // Gemini 1.5 Models
+                    'gemini-1.5-pro',
+                    'gemini-1.5-flash',
+                    'gemini-1.0-pro',
+                    // Experimental Models
+                    'gemini-1.5-pro-exp-0827',
+                    'gemini-1.5-flash-exp-0827',
+                    'gemini-1.5-flash-8b-exp-0924'
+                ]);
             }
             
             // Update the model selector
@@ -399,20 +415,43 @@ try {
                 const geminiData = await geminiResponse.json();
                 const geminiModels = geminiData.models || [];
                 
-                // Check specifically for gemini-pro model
-                const hasGeminiPro = geminiModels.some(model => 
-                    model.name.includes('gemini-pro') || model.name.includes('models/gemini-pro')
+                // Check for any Gemini model instead of just gemini-pro
+                const hasGeminiModel = geminiModels.some(model => 
+                    model.name.includes('gemini-') || model.name.includes('models/gemini-')
                 );
                 
-                if (!hasGeminiPro) {
-                    throw new Error('Gemini Pro model is not available for this API key');
+                if (!hasGeminiModel) {
+                    throw new Error('No Gemini models are available for this API key');
                 }
                 
-                // Save gemini-pro as the enabled model
-                await ApiKeyManager.saveEnabledModels('gemini', ['gemini-pro']);
+                // Save all Gemini models as enabled
+                await ApiKeyManager.saveEnabledModels('gemini', [
+                    // Gemini 2.0 Models
+                    'gemini-2.0-pro',
+                    'gemini-2.0-vision',
+                    // Gemini 1.5 Models
+                    'gemini-1.5-pro',
+                    'gemini-1.5-flash',
+                    'gemini-1.0-pro',
+                    // Experimental Models
+                    'gemini-1.5-pro-exp-0827',
+                    'gemini-1.5-flash-exp-0827',
+                    'gemini-1.5-flash-8b-exp-0924'
+                ]);
                 
                 return true;
-                
+
+            case 'grok':
+                try {
+                    console.log('Validating Grok API key format...');
+                    // Save grok-2-1212 as the enabled model
+                    await ApiKeyManager.saveEnabledModels('grok', ['grok-2-1212', 'grok-2-vision-1212']);
+                    return true;
+                } catch (error) {
+                    console.error('Error validating Grok API key:', error);
+                    throw new Error(`Failed to validate Grok API key: ${error.message}`);
+                }
+
             // Add other providers here
             default:
                 throw new Error('Provider not supported');
@@ -547,13 +586,12 @@ try {
                             filteredModels.forEach(model => {
                                 const option = document.createElement('div');
                                 option.className = 'model-option';
-                                const modelId = model.id.includes('/') ? model.id.split('/')[1] : model.id;
-                                option.dataset.value = `${provider}:${modelId}`;
+                                option.dataset.value = `${provider}:${model.id}`;
                                 option.innerHTML = `
                                     <img class="provider-logo" src="${chrome.runtime.getURL(`assets/${logoFile}`)}" alt="${provider}">
                                     <span>${model.name}</span>
                                 `;
-                                if (`${provider}:${modelId}` === currentModel) {
+                                if (`${provider}:${model.id}` === currentModel) {
                                     option.classList.add('selected');
                                     selectedText.textContent = model.name;
                                     selectedLogo.src = chrome.runtime.getURL(`assets/${logoFile}`);
@@ -693,7 +731,21 @@ try {
                 { id: 'pplx-7b-online', name: 'Perplexity 7B' }
             ],
             gemini: [
-                { id: 'gemini-pro', name: 'Gemini Pro' }
+                // Gemini 2.0 Models
+                { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro' },
+                { id: 'gemini-2.0-vision', name: 'Gemini 2.0 Vision' },
+                // Gemini 1.5 Models
+                { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
+                { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+                { id: 'gemini-1.0-pro', name: 'Gemini 1.0 Pro' },
+                // Experimental Models
+                { id: 'gemini-1.5-pro-exp-0827', name: 'Gemini 1.5 Pro (Experimental)' },
+                { id: 'gemini-1.5-flash-exp-0827', name: 'Gemini 1.5 Flash (Experimental)' },
+                { id: 'gemini-1.5-flash-8b-exp-0924', name: 'Gemini 1.5 Flash-8B (Experimental)' }
+            ],
+            grok: [
+                { id: 'grok-2-1212', name: 'Grok 2' },
+                { id: 'grok-2-vision-1212', name: 'Grok 2 Vision' }
             ]
         };
         
@@ -868,6 +920,18 @@ try {
             sendButton.click();
         }
     });
+
+    // Show error message in chat
+    function showError(errorMessage) {
+        if (currentAssistantMessage) {
+            currentAssistantMessage.textContent = `Error: ${errorMessage}`;
+            currentAssistantMessage.style.color = '#f44336';
+        } else {
+            const errorDiv = addMessage('assistant', `Error: ${errorMessage}`);
+            errorDiv.style.color = '#f44336';
+        }
+        showToast(errorMessage, 'error');
+    }
 
     // Single function to handle message updates
     function handleModelResponse(message) {
@@ -1188,7 +1252,7 @@ Let's break this down:`;
 
     // Show model editor
     async function showModelEditor() {
-        const providers = ['openai', 'anthropic', 'openrouter', 'perplexity', 'gemini'];
+        const providers = ['openai', 'anthropic', 'openrouter', 'perplexity', 'gemini', 'grok'];
         const modelEditor = document.createElement('div');
         modelEditor.className = 'model-editor';
         

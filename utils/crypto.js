@@ -40,6 +40,7 @@ export async function validateApiKey(provider, key) {
         anthropic: /^sk-ant-[A-Za-z0-9-]{20,}$/,
         perplexity: /^pplx-[A-Za-z0-9]{32,}$/,
         gemini: /^[A-Za-z0-9-]{39}$/,
+        grok: /^[A-Za-z0-9-_]{40,}$/  // Grok API key pattern
     };
     
     // First validate the key format

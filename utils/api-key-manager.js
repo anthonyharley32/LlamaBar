@@ -15,6 +15,13 @@ export class ApiKeyManager {
             [`apiKey_${provider}`]: encryptedKey
         });
 
+        // For Grok, save the default models
+        if (provider === 'grok') {
+            console.log('Saving enabled Grok models...');
+            await this.saveEnabledModels('grok', ['grok-2-1212', 'grok-2-vision-1212']);
+            console.log('Enabled Grok models saved successfully');
+        }
+
         return true;
     }
 
