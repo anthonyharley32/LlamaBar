@@ -192,121 +192,86 @@ export class ExternalModelService {
     }
 
     static async handleAnthropic(modelId, prompt, options = {}) {
-        const apiKey = await ApiKeyManager.getApiKey('anthropic');
-        if (!apiKey) {
-            throw new Error('Anthropic API key not found');
-        }
+        try {
+            console.log('🚀 Starting Anthropic request handler:', { modelId, hasImage: options.hasImage });
+            const apiKey = await ApiKeyManager.getApiKey('anthropic');
+            if (!apiKey) {
+                throw new Error('Anthropic API key not found');
+            }
+            console.log('✅ API key retrieved successfully');
 
-        const messages = [];
-        if (options.hasImage) {
-            const base64Image = prompt.match(/<image>(.*?)<\/image>/)?.[1];
-            const text = prompt.replace(/<image>.*?<\/image>\n?/, '').trim();
-            
-            messages.push({
-                role: 'user',
-                content: [
-                    { type: 'text', text },
-                    base64Image ? {
-                        type: 'image',
-                        source: { type: 'base64', data: base64Image }
-                    } : null
-                ].filter(Boolean)
-            });
-        } else {
-            messages.push({
-                role: 'user',
-                content: prompt
-            });
-        }
+            const messages = [];
+            if (options.hasImage) {
+                const base64Image = prompt.match(/<image>(.*?)<\/image>/)?.[1];
+                const text = prompt.replace(/<image>.*?<\/image>\n?/, '').trim();
+                
+                messages.push({
+                    role: 'user',
+                    content: [
+                        { type: 'text', text },
+                        base64Image ? {
+                            type: 'image',
+                            source: { type: 'base64', media_type: 'image/jpeg', data: base64Image }
+                        } : null
+                    ].filter(Boolean)
+                });
+            } else {
+                messages.push({
+                    role: 'user',
+                    content: prompt
+                });
+            }
 
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01',
-                'content-type': 'application/json'
-            },
-            body: JSON.stringify({
+            console.log('📝 Preparing Anthropic API request:', {
+                model: modelId,
+                messageCount: messages.length,
+                firstMessageContent: messages[0].content
+            });
+
+            const requestBody = {
                 model: modelId,
                 messages,
-                stream: true
-            })
-        });
+                stream: true,
+                max_tokens: 4096
+            };
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error?.message || `API error: ${response.status}`);
-        }
+            console.log('🌐 Making Anthropic API request with body:', JSON.stringify(requestBody));
 
-        return ExternalModelService.handleAnthropicStream(response);
-    }
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                    'content-type': 'application/json',
+                    'anthropic-dangerous-direct-browser-access': 'true'
+                },
+                body: JSON.stringify(requestBody)
+            });
 
-    static async *handleAnthropicStream(response) {
-        console.log('🔄 Initializing Anthropic stream handler');
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let accumulatedContent = '';
+            console.log('📨 Received response from Anthropic:', {
+                status: response.status,
+                statusText: response.statusText,
+                headers: Object.fromEntries(response.headers.entries())
+            });
 
-        try {
-            while (true) {
-                const { value, done } = await reader.read();
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('❌ Anthropic API error:', errorData);
                 
-                if (done) {
-                    console.log('🏁 Anthropic stream complete');
-                    if (accumulatedContent) {
-                        yield {
-                            type: 'MODEL_RESPONSE',
-                            success: true,
-                            delta: { content: '' },
-                            response: accumulatedContent,
-                            done: true
-                        };
-                    }
-                    break;
+                // Handle specific error types
+                if (errorData.error?.type === 'overloaded_error') {
+                    throw new Error('Claude is currently experiencing high traffic. Please try again in a few moments.');
                 }
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                    if (!line.trim()) continue;
-                    if (line === 'data: [DONE]') {
-                        console.log('🏁 Received DONE marker');
-                        yield {
-                            type: 'MODEL_RESPONSE',
-                            success: true,
-                            delta: { content: '' },
-                            response: accumulatedContent,
-                            done: true
-                        };
-                        continue;
-                    }
-
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const jsonData = JSON.parse(line.slice(6));
-                            const content = jsonData.delta?.text || '';
-                            if (content) {
-                                accumulatedContent += content;
-                                yield {
-                                    type: 'MODEL_RESPONSE',
-                                    success: true,
-                                    delta: { content },
-                                    response: accumulatedContent,
-                                    done: false
-                                };
-                            }
-                        } catch (e) {
-                            console.warn('⚠️ Error parsing Anthropic JSON:', e);
-                            continue;
-                        }
-                    }
-                }
+                
+                throw new Error(errorData.error?.message || `Anthropic API error: ${response.status}`);
             }
-        } finally {
-            reader.releaseLock();
+
+            return ExternalModelService.handleProviderStream(response, 'anthropic', (json) => {
+                return json.delta?.text || '';
+            });
+        } catch (error) {
+            console.error('💥 Error in handleAnthropic:', error);
+            throw error;
         }
     }
 

@@ -2,27 +2,51 @@ import { encryptApiKey, decryptApiKey, validateApiKey } from './crypto.js';
 
 export class ApiKeyManager {
     static async saveApiKey(provider, key) {
-        if (!validateApiKey(provider, key)) {
-            throw new Error(`Invalid API key format for ${provider}`);
+        try {
+            console.log(`Attempting to save API key for ${provider}...`);
+            
+            const isValid = await validateApiKey(provider, key);
+            if (!isValid) {
+                console.error(`Invalid API key format for ${provider}`);
+                throw new Error(`Invalid API key format for ${provider}`);
+            }
+
+            const encryptedKey = await encryptApiKey(key);
+            if (!encryptedKey) {
+                console.error('Failed to encrypt API key');
+                throw new Error('Failed to encrypt API key');
+            }
+
+            await chrome.storage.sync.set({
+                [`apiKey_${provider}`]: encryptedKey
+            });
+
+            // For Grok, save the default models
+            if (provider === 'grok') {
+                console.log('Saving enabled Grok models...');
+                await this.saveEnabledModels('grok', ['grok-2-1212', 'grok-2-vision-1212']);
+                console.log('Enabled Grok models saved successfully');
+            }
+
+            // For Anthropic, save the default models
+            if (provider === 'anthropic') {
+                console.log('Saving enabled Anthropic models...');
+                await this.saveEnabledModels('anthropic', [
+                    'claude-3-opus-20240229',
+                    'claude-3-sonnet-20240229',
+                    'claude-3-haiku-20240307',
+                    'claude-2.1',
+                    'claude-2.0'
+                ]);
+                console.log('Enabled Anthropic models saved successfully');
+            }
+
+            console.log(`Successfully saved API key for ${provider}`);
+            return true;
+        } catch (error) {
+            console.error(`Error saving API key for ${provider}:`, error);
+            throw error;
         }
-
-        const encryptedKey = await encryptApiKey(key);
-        if (!encryptedKey) {
-            throw new Error('Failed to encrypt API key');
-        }
-
-        await chrome.storage.sync.set({
-            [`apiKey_${provider}`]: encryptedKey
-        });
-
-        // For Grok, save the default models
-        if (provider === 'grok') {
-            console.log('Saving enabled Grok models...');
-            await this.saveEnabledModels('grok', ['grok-2-1212', 'grok-2-vision-1212']);
-            console.log('Enabled Grok models saved successfully');
-        }
-
-        return true;
     }
 
     static async getApiKey(provider) {

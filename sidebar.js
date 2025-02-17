@@ -43,7 +43,7 @@ try {
     });
 
     let currentAssistantMessage = null;
-    let currentModel = 'local:llama3.2:3b';  // Initialize with local: prefix
+    let currentModel = 'local:llama3.2:1b';  // Initialize with local: prefix
     let currentImage = null;
     let setupWizardFrame = null;
     let markdownEnabled = false;
@@ -272,7 +272,7 @@ try {
     // Update the handleApiKeySave function to properly show/hide UI elements
     async function handleApiKeySave(provider) {
         const input = document.querySelector(`input[data-provider="${provider}"]`);
-        if (!input || !input.value.trim()) {
+        if (!input || !input.value) {
             showToast('Please enter an API key', 'error');
             return;
         }
@@ -282,7 +282,12 @@ try {
         const originalText = saveButton.textContent;
 
         try {
-            const apiKey = input.value.trim();
+            const apiKey = input.value; // Removed trim() to preserve exact key format
+            
+            // Preliminary format validation for Anthropic
+            if (provider === 'anthropic' && !apiKey.startsWith('sk-ant-')) {
+                throw new Error('Invalid Anthropic API key format. Key should start with "sk-ant-"');
+            }
             
             // Show loading state
             saveButton.textContent = 'Validating...';
@@ -400,6 +405,42 @@ try {
                 }
                 
                 return true;
+
+            case 'anthropic':
+                try {
+                    // Validate Anthropic key format first
+                    if (!apiKey.startsWith('sk-ant-')) {
+                        throw new Error('Invalid Anthropic API key format. Key should start with "sk-ant-"');
+                    }
+
+                    const response = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: {
+                            'anthropic-version': '2023-06-01',
+                            'x-api-key': apiKey,
+                            'content-type': 'application/json',
+                            'anthropic-dangerous-direct-browser-access': 'true'
+                        },
+                        body: JSON.stringify({
+                            model: 'claude-3-haiku-20240307',
+                            messages: [{ role: 'user', content: 'test' }],
+                            max_tokens: 1
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        if (response.status === 401) {
+                            throw new Error(errorData.error?.message || 'Invalid API key');
+                        }
+                        throw new Error(errorData.error?.message || `API error: ${response.status}`);
+                    }
+
+                    return true;
+                } catch (error) {
+                    console.error('Error validating Anthropic key:', error);
+                    throw error;
+                }
 
             case 'gemini':
                 // Test the API key by making a simple request to list models
@@ -717,9 +758,16 @@ try {
         // Fallback static lists for other providers
         const models = {
             anthropic: [
+                // Claude 3.5 Models
+                { id: 'claude-3.5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
+                { id: 'claude-3.5-haiku-20241022', name: 'Claude 3.5 Haiku' },
+                // Claude 3 Models
                 { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
                 { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet' },
-                { id: 'claude-2.1', name: 'Claude 2.1' }
+                { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' },
+                // Claude 2 Models
+                { id: 'claude-2.1', name: 'Claude 2.1' },
+                { id: 'claude-2.0', name: 'Claude 2.0' }
             ],
             openrouter: [
                 { id: 'openai/gpt-4-turbo-preview', name: 'GPT-4 Turbo (OpenRouter)' },
