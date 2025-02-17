@@ -26,20 +26,45 @@ if (!window.ollamaAssistantInitialized) {
             }
 
             port = chrome.runtime.connect({ name: 'content-port' });
+            console.log('🔌 Connected to background script with port:', port);
             
             port.onMessage.addListener((message) => {
+                console.log('📥 Content script received message:', {
+                    type: message.type,
+                    success: message.success,
+                    responseLength: message.response?.length,
+                    isDone: message.done
+                });
+                
                 if (chrome.runtime.lastError) {
-                    console.log('Runtime error in onMessage:', chrome.runtime.lastError);
+                    console.error('❌ Runtime error in onMessage:', chrome.runtime.lastError);
                     return;
                 }
+                
                 if (sidebarFrame?.contentWindow) {
-                    sidebarFrame.contentWindow.postMessage(message, '*');
+                    console.log('📤 Forwarding message to sidebar frame:', {
+                        messageType: message.type,
+                        contentLength: message.response?.length,
+                        isDone: message.done
+                    });
+                    
+                    try {
+                        sidebarFrame.contentWindow.postMessage(message, '*');
+                        console.log('✅ Message forwarded to sidebar');
+                    } catch (error) {
+                        console.error('❌ Error forwarding message:', error);
+                    }
+                } else {
+                    console.warn('⚠️ No sidebar frame available for message:', {
+                        frameExists: !!sidebarFrame,
+                        hasContentWindow: !!sidebarFrame?.contentWindow
+                    });
                 }
             });
 
             port.onDisconnect.addListener(() => {
                 const error = chrome.runtime.lastError;
-                console.log('Connection lost:', error ? error.message : 'unknown reason');
+                console.log('🔌 Connection lost:', error ? error.message : 'unknown reason');
                 port = null;
                 
                 // Clear any existing reconnect timeout
@@ -55,15 +80,17 @@ if (!window.ollamaAssistantInitialized) {
             reconnectAttempts = 0;
             return true;
         } catch (error) {
-            console.error('Failed to establish connection:', error);
+            console.error('❌ Failed to establish connection:', error);
             return false;
         }
     }
 
     // Create and manage sidebar
     function createSidebar() {
+        console.log('🎯 Creating sidebar...');
         // Remove existing sidebar if it exists
         if (document.getElementById('ollama-sidebar-frame')) {
+            console.log('🗑️ Removing existing sidebar frame');
             document.getElementById('ollama-sidebar-frame').remove();
         }
         
@@ -84,6 +111,7 @@ if (!window.ollamaAssistantInitialized) {
                 z-index: 2147483647;
             `;
             document.body.appendChild(sidebarFrame);
+            console.log('✅ Sidebar frame created and appended:', sidebarFrame);
             
             // Clean up on unload
             window.addEventListener('unload', () => {
@@ -93,12 +121,13 @@ if (!window.ollamaAssistantInitialized) {
                 }
             });
         } catch (error) {
-            console.error('Failed to create sidebar:', error);
+            console.error('❌ Failed to create sidebar:', error);
             sidebarFrame = null;
         }
     }
 
     function toggleSidebar(show) {
+        console.log('🔄 Toggling sidebar:', { show });
         if (!sidebarFrame || !document.getElementById('ollama-sidebar-frame')) {
             createSidebar();
         }
@@ -109,18 +138,60 @@ if (!window.ollamaAssistantInitialized) {
                 type: 'SIDEBAR_STATE_CHANGED',
                 isVisible: show
             });
+        } else {
+            console.warn('⚠️ No sidebar frame available to toggle');
         }
     }
 
+    // Handle messages from background script
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        console.log('📨 Content script received runtime message:', {
+            type: message.type,
+            success: message.success,
+            responseLength: message.response?.length,
+            isDone: message.done
+        });
+        
+        if (message.type === 'TOGGLE_SIDEBAR') {
+            toggleSidebar(message.show);
+            sendResponse({ success: true });
+        } else if (message.type === 'MODEL_RESPONSE') {
+            if (sidebarFrame?.contentWindow) {
+                console.log('📤 Forwarding model response to sidebar:', {
+                    contentLength: message.response?.length,
+                    isDone: message.done
+                });
+                
+                try {
+                    sidebarFrame.contentWindow.postMessage(message, '*');
+                    console.log('✅ Message forwarded to sidebar');
+                    sendResponse({ success: true });
+                } catch (error) {
+                    console.error('❌ Error forwarding message:', error);
+                    sendResponse({ success: false, error: error.message });
+                }
+            } else {
+                console.error('❌ No sidebar frame available for message');
+                sendResponse({ success: false, error: 'No sidebar frame available' });
+            }
+        }
+        
+        return true;
+    });
+
     // Listen for messages from the sidebar iframe
     window.addEventListener('message', (event) => {
+        console.log('📥 Content script received window message:', event.data);
+        
         // Verify message origin
         if (event.source !== sidebarFrame?.contentWindow) {
+            console.log('⚠️ Ignoring message from unknown source');
             return;
         }
 
         // Handle close sidebar message
         if (event.data.type === 'CLOSE_SIDEBAR') {
+            console.log('🚪 Handling close sidebar request');
             if (sidebarFrame) {
                 sidebarFrame.style.right = '-400px';
                 // Wait for transition to complete before removing
@@ -141,10 +212,12 @@ if (!window.ollamaAssistantInitialized) {
 
         // Ensure we have a connection
         if (!port) {
+            console.log('🔌 No port connection, attempting to initialize...');
             const connected = initializeConnection();
             if (!connected) {
+                console.error('❌ Failed to establish connection');
                 event.source.postMessage({
-                    type: 'OLLAMA_RESPONSE',
+                    type: 'MODEL_RESPONSE',
                     success: false,
                     error: 'Failed to connect to extension. Please refresh the page.'
                 }, '*');
@@ -154,26 +227,16 @@ if (!window.ollamaAssistantInitialized) {
 
         // Forward message to background script
         try {
+            console.log('📤 Forwarding message to background script:', event.data);
             port.postMessage(event.data);
         } catch (error) {
-            console.error('Failed to forward message:', error);
+            console.error('❌ Failed to forward message:', error);
             event.source.postMessage({
-                type: 'OLLAMA_RESPONSE',
+                type: 'MODEL_RESPONSE',
                 success: false,
                 error: 'Failed to send message to extension.'
             }, '*');
         }
-    });
-
-    // Handle messages from background script
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.type === 'TOGGLE_SIDEBAR') {
-            toggleSidebar(message.show);
-            // Send response immediately
-            sendResponse({ success: true });
-        }
-        // Don't return true since we're not using async response
-        return false;
     });
 
     // Handle text selection with debouncing

@@ -1,6 +1,7 @@
 // Import ApiKeyManager
 import { ApiKeyManager } from './utils/api-key-manager.js';
 import { LocalModelService } from './services/local-model.js';
+import { ExternalModelService } from './services/external-model.js';
 import { MessageRouter } from './utils/message-router.js';
 
 // State management
@@ -119,10 +120,17 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'SIDEBAR_STATE_CHANGED') {
         isSidebarVisible = message.isVisible;
+        return false; // No async response needed
     } else if (message.type === 'QUERY_OLLAMA') {
-        MessageRouter.routeModelRequest(message);
+        // Handle the initial response synchronously
+        MessageRouter.routeModelRequest(message, null, sendResponse)
+            .catch(error => {
+                console.error('Error routing model request:', error);
+                sendResponse({ success: false, error: error.message });
+            });
         return true; // Will respond asynchronously
     }
+    return false;
 });
 
 // Handle messages from the popup/side panel
@@ -131,7 +139,16 @@ chrome.runtime.onConnect.addListener((p) => {
     port = p;
     port.onMessage.addListener(async (message) => {
         if (message.type === 'QUERY_OLLAMA') {
-            await MessageRouter.routeModelRequest(message, port);
+            try {
+                await MessageRouter.routeModelRequest(message, port);
+            } catch (error) {
+                console.error('Error handling popup message:', error);
+                port.postMessage({
+                    type: 'MODEL_RESPONSE',
+                    success: false,
+                    error: error.message
+                });
+            }
         }
     });
 
@@ -151,129 +168,27 @@ const OLLAMA_API = 'http://localhost:11434';
 // Function to communicate with Ollama
 async function handleOllamaQuery(prompt, model = 'llama3.2:1b') {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
         // First check if Ollama is running
-        try {
-            console.log('Checking Ollama server status...');
-            const healthCheck = await fetch(`${OLLAMA_API}/api/tags`);
-            if (!healthCheck.ok) {
-                console.error('Ollama health check failed:', await healthCheck.text());
-                throw new Error('Ollama is not running or not accessible');
-            }
-            const healthData = await healthCheck.json();
-            console.log('Available Ollama models:', healthData.models?.map(m => m.name));
-        } catch (error) {
-            console.error('Ollama connection error:', error);
-            throw new Error('Cannot connect to Ollama. Please ensure it is running.');
+        const isRunning = await checkOllamaRunning();
+        if (!isRunning) {
+            throw new Error('Ollama is not running. Please start Ollama and try again.');
         }
 
-        // Determine if this is a vision-capable model
-        const isVisionModel = model.toLowerCase().includes('vision') || 
-                            model.toLowerCase().includes('dream') || 
-                            model.toLowerCase().includes('image');
-        
-        console.log('Model request details:', {
+        const isVisionModel = model.toLowerCase().includes('vision');
+        const requestBody = {
             model: model,
-            isVisionModel: isVisionModel,
-            hasImage: prompt.includes('<image>'),
-            promptLength: prompt.length
-        });
-
-        let requestBody = {
-            model: model,
-            stream: true,
-            options: {
-                temperature: 0.7,
-                top_k: 50,
-                top_p: 0.95,
-                repeat_penalty: 1.1
-            }
+            stream: true
         };
 
-        // Handle vision model format
         if (isVisionModel && prompt.includes('<image>')) {
-            console.log('Processing vision model request');
-            const imageMatch = prompt.match(/<image>(.*?)<\/image>/s);
-            const base64Image = imageMatch ? imageMatch[1] : null;
-            const textPrompt = prompt.replace(/<image>.*?<\/image>/s, '').trim();
-
-            if (!base64Image) {
-                console.error('No image data found in prompt');
-                throw new Error('Image data is missing or invalid');
-            }
-
-            // Clean the base64 data - remove data URL prefix if present
-            const cleanBase64 = base64Image.replace(/^data:image\/[a-z]+;base64,/, '');
-
-            console.log('Vision request structure:', {
-                model: model,
-                hasImage: !!cleanBase64,
-                promptLength: textPrompt.length
-            });
-
-            // Format specifically for vision models
-            requestBody = {
-                model: model,
-                messages: [{
-                    role: "user",
-                    content: textPrompt || "Describe this image",
-                    images: [cleanBase64]
-                }],
-                stream: false,  // Disable streaming for more reliable responses
-                options: {
-                    temperature: 0.0,  // Keep temperature at 0 for more consistent responses
-                    num_predict: 500   // Ensure we get a complete response
-                }
-            };
-
-            // Use chat endpoint for vision models
-            console.log('Sending vision request to Ollama chat endpoint...');
-            const response = await fetch('http://localhost:11434/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Origin': 'chrome-extension://' + chrome.runtime.id
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Ollama vision request failed:', {
-                    status: response.status,
-                    statusText: response.statusText,
-                    error: errorText
-                });
-                throw new Error(`Ollama vision request failed: ${response.status} ${response.statusText}\n${errorText}`);
-            }
-
-            // Handle non-streaming response
-            const data = await response.json();
-            console.log('Received vision model response:', {
-                success: !!data.message,
-                contentLength: data.message?.content?.length
-            });
-
-            if (data.message && data.message.content) {
-                chrome.runtime.sendMessage({
-                    type: 'OLLAMA_RESPONSE',
-                    success: true,
-                    response: data.message.content,
-                    done: true
-                });
-            } else {
-                console.error('Invalid vision model response format:', data);
-                throw new Error('Invalid response format from vision model');
-            }
-
-            return { success: true };
+            // Handle vision model request
+            const { processedPrompt, images } = await processVisionPrompt(prompt);
+            requestBody.prompt = processedPrompt;
+            requestBody.images = images;
         } else {
-            // Regular text prompt for other models
-            console.log('Processing text-only request');
             requestBody.prompt = prompt;
         }
 
@@ -304,51 +219,11 @@ async function handleOllamaQuery(prompt, model = 'llama3.2:1b') {
             throw new Error(`Ollama request failed: ${response.status} ${response.statusText}\n${errorText}`);
         }
 
-        let fullResponse = '';
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-
-        console.log('Starting to read response stream...');
-        while (true) {
-            const {value, done} = await reader.read();
-            if (done) {
-                console.log('Response stream complete');
-                break;
-            }
-            
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
-            
-            for (const line of lines) {
-                if (line.trim() === '') continue;
-                
-                try {
-                    const data = JSON.parse(line);
-                    if (data.response) {
-                        fullResponse += data.response;
-                        // Stream each chunk to the UI
-                        chrome.runtime.sendMessage({
-                            type: 'OLLAMA_RESPONSE',
-                            success: true,
-                            response: fullResponse,
-                            done: data.done
-                        });
-                    }
-                } catch (e) {
-                    console.error('Error parsing JSON chunk:', e, 'Raw chunk:', line);
-                }
-            }
+        // Use LocalModelService to handle the streaming response
+        const streamGenerator = LocalModelService.handleStreamingResponse(response);
+        for await (const chunk of streamGenerator) {
+            chrome.runtime.sendMessage(chunk);
         }
-
-        if (!fullResponse) {
-            console.warn('No response content received from model');
-            throw new Error('No response content received from model');
-        }
-
-        console.log('Request completed successfully:', {
-            responseLength: fullResponse.length,
-            model: model
-        });
 
         return { success: true };
     } catch (error) {
@@ -362,41 +237,27 @@ async function handleOllamaQuery(prompt, model = 'llama3.2:1b') {
 // Handle OpenAI API request
 async function handleOpenAIRequest(prompt, model, hasImage = false, port = null) {
     try {
-        console.log('Initializing OpenAI request:', {
-            model,
-            hasImage,
-            promptLength: prompt.length
-        });
-
         const apiKey = await ApiKeyManager.getApiKey('openai');
         if (!apiKey) {
-            console.error('OpenAI API key not found');
             throw new Error('OpenAI API key not found');
         }
 
-        // Extract the actual model ID (remove the 'openai:' prefix if present)
         const modelId = model.replace('openai:', '');
-
         const messages = [];
+        
         if (hasImage) {
-            console.log('Processing image-based request for OpenAI');
             const base64Image = prompt.match(/<image>(.*?)<\/image>/)?.[1];
             const text = prompt.replace(/<image>.*?<\/image>\n?/, '').trim();
             
-            if (!base64Image) {
-                console.error('No image data found in prompt for OpenAI vision request');
-                throw new Error('Image data is missing or invalid');
-            }
-
             messages.push({
                 role: 'user',
                 content: [
-                    { type: 'text', text },
-                    {
+                    { type: 'text', text: text },
+                    base64Image ? {
                         type: 'image_url',
-                        image_url: { url: base64Image }
-                    }
-                ]
+                        image_url: { url: `data:image/jpeg;base64,${base64Image}` }
+                    } : null
+                ].filter(Boolean)
             });
         } else {
             messages.push({
@@ -404,12 +265,6 @@ async function handleOpenAIRequest(prompt, model, hasImage = false, port = null)
                 content: prompt
             });
         }
-
-        console.log('Sending request to OpenAI:', {
-            model: modelId,
-            messageCount: messages.length,
-            hasImage
-        });
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
@@ -426,135 +281,22 @@ async function handleOpenAIRequest(prompt, model, hasImage = false, port = null)
 
         if (!response.ok) {
             const error = await response.json();
-            console.error('OpenAI API error:', {
-                status: response.status,
-                error: error.error
-            });
             throw new Error(error.error?.message || `OpenAI API error: ${response.status}`);
         }
 
-        console.log('Starting to read OpenAI response stream...');
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let fullResponse = '';
-
-        try {
-            while (true) {
-                const { value, done } = await reader.read();
-                
-                if (done) {
-                    console.log('OpenAI response stream complete');
-                    break;
-                }
-
-                // Decode the chunk and add it to our buffer
-                buffer += decoder.decode(value, { stream: true });
-                
-                // Split on newlines, keeping any remainder in the buffer
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                    // Skip empty lines and "[DONE]" messages
-                    if (!line.trim() || line === 'data: [DONE]') continue;
-
-                    // Remove the "data: " prefix and parse the JSON
-                    const jsonStr = line.replace(/^data: /, '').trim();
-                    if (!jsonStr) continue;
-
-                    try {
-                        const json = JSON.parse(jsonStr);
-                        const content = json.choices?.[0]?.delta?.content || '';
-                        
-                        if (content) {
-                            // Send just the new content chunk
-                            const response = {
-                                type: 'OLLAMA_RESPONSE',
-                                success: true,
-                                response: content,
-                                done: false
-                            };
-                            
-                            if (port) {
-                                port.postMessage(response);
-                            } else {
-                                chrome.runtime.sendMessage(response);
-                            }
-                            
-                            fullResponse += content;
-                        }
-                    } catch (e) {
-                        console.error('Error parsing OpenAI SSE message:', e, 'Raw line:', line);
-                    }
-                }
-            }
-
-            // Handle any remaining buffer content
-            if (buffer.trim()) {
-                try {
-                    const jsonStr = buffer.replace(/^data: /, '').trim();
-                    if (jsonStr && jsonStr !== '[DONE]') {
-                        const json = JSON.parse(jsonStr);
-                        const content = json.choices?.[0]?.delta?.content || '';
-                        if (content) {
-                            fullResponse += content;
-                            const response = {
-                                type: 'OLLAMA_RESPONSE',
-                                success: true,
-                                response: content,
-                                done: false
-                            };
-                            if (port) {
-                                port.postMessage(response);
-                            } else {
-                                chrome.runtime.sendMessage(response);
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.error('Error parsing final buffer:', e);
-                }
-            }
-        } finally {
-            // Always send the final done message
-            const finalResponse = {
-                type: 'OLLAMA_RESPONSE',
-                success: true,
-                response: '',
-                done: true
-            };
-            
+        // Use ExternalModelService to handle the streaming response
+        const streamGenerator = ExternalModelService.handleOpenAIStream(response);
+        for await (const chunk of streamGenerator) {
             if (port) {
-                port.postMessage(finalResponse);
+                port.postMessage(chunk);
             } else {
-                chrome.runtime.sendMessage(finalResponse);
+                chrome.runtime.sendMessage(chunk);
             }
         }
 
-        if (!fullResponse) {
-            console.warn('No response content received from OpenAI');
-            throw new Error('No response content received from OpenAI');
-        }
-
-        console.log('OpenAI request completed successfully:', {
-            responseLength: fullResponse.length,
-            model: modelId
-        });
-
+        return { success: true };
     } catch (error) {
-        console.error('OpenAI request error:', error);
-        const errorResponse = {
-            type: 'OLLAMA_RESPONSE',
-            success: false,
-            error: error.message
-        };
-        
-        if (port) {
-            port.postMessage(errorResponse);
-        } else {
-            chrome.runtime.sendMessage(errorResponse);
-        }
+        throw new Error(`OpenAI API error: ${error.message}`);
     }
 }
 
@@ -566,28 +308,6 @@ async function handleAnthropicRequest(prompt, modelId, hasImage = false, port = 
             throw new Error('Anthropic API key not found');
         }
 
-        const messages = [];
-        if (hasImage) {
-            const base64Image = prompt.match(/<image>(.*?)<\/image>/)?.[1];
-            const text = prompt.replace(/<image>.*?<\/image>\n?/, '').trim();
-            
-            messages.push({
-                role: 'user',
-                content: [
-                    { type: 'text', text: text },
-                    base64Image ? {
-                        type: 'image',
-                        source: { type: 'base64', data: base64Image }
-                    } : null
-                ].filter(Boolean)
-            });
-        } else {
-            messages.push({
-                role: 'user',
-                content: prompt
-            });
-        }
-
         const response = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: {
@@ -597,67 +317,30 @@ async function handleAnthropicRequest(prompt, modelId, hasImage = false, port = 
             },
             body: JSON.stringify({
                 model: modelId,
-                messages,
+                messages: [{
+                    role: 'user',
+                    content: prompt
+                }],
                 stream: true
             })
         });
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error?.message || `API error: ${response.status}`);
+            throw new Error(error.error?.message || `Anthropic API error: ${response.status}`);
         }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value);
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-                if (line.trim() === '') continue;
-                if (line === 'data: [DONE]') continue;
-                
-                try {
-                    const json = JSON.parse(line.replace('data: ', ''));
-                    const content = json.delta?.text || '';
-                    if (content) {
-                        const response = {
-                            type: 'OLLAMA_RESPONSE',
-                            success: true,
-                            response: content,
-                            done: false
-                        };
-                        if (port) {
-                            port.postMessage(response);
-                        } else {
-                            chrome.runtime.sendMessage(response);
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Error parsing SSE message:', e);
-                }
+        // Use ExternalModelService to handle the streaming response
+        const streamGenerator = ExternalModelService.handleAnthropicStream(response);
+        for await (const chunk of streamGenerator) {
+            if (port) {
+                port.postMessage(chunk);
+            } else {
+                chrome.runtime.sendMessage(chunk);
             }
         }
 
-        const finalResponse = {
-            type: 'OLLAMA_RESPONSE',
-            success: true,
-            response: '',
-            done: true
-        };
-        
-        if (port) {
-            port.postMessage(finalResponse);
-        } else {
-            chrome.runtime.sendMessage(finalResponse);
-        }
-
+        return { success: true };
     } catch (error) {
         throw new Error(`Anthropic API error: ${error.message}`);
     }
@@ -735,7 +418,7 @@ async function handleGeminiRequest(prompt, modelId, hasImage = false, port = nul
                     const content = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
                     if (content) {
                         const response = {
-                            type: 'OLLAMA_RESPONSE',
+                            type: 'MODEL_RESPONSE',
                             success: true,
                             response: content,
                             done: false
@@ -753,7 +436,7 @@ async function handleGeminiRequest(prompt, modelId, hasImage = false, port = nul
         }
 
         const finalResponse = {
-            type: 'OLLAMA_RESPONSE',
+            type: 'MODEL_RESPONSE',
             success: true,
             response: '',
             done: true
@@ -819,7 +502,7 @@ async function handlePerplexityRequest(prompt, modelId, hasImage = false, port =
                     const content = json.choices[0]?.delta?.content || '';
                     if (content) {
                         const response = {
-                            type: 'OLLAMA_RESPONSE',
+                            type: 'MODEL_RESPONSE',
                             success: true,
                             response: content,
                             done: false
@@ -837,7 +520,7 @@ async function handlePerplexityRequest(prompt, modelId, hasImage = false, port =
         }
 
         const finalResponse = {
-            type: 'OLLAMA_RESPONSE',
+            type: 'MODEL_RESPONSE',
             success: true,
             response: '',
             done: true
@@ -905,7 +588,7 @@ async function handleOpenRouterRequest(prompt, modelId, hasImage = false, port =
                     const content = json.choices[0]?.delta?.content || '';
                     if (content) {
                         const response = {
-                            type: 'OLLAMA_RESPONSE',
+                            type: 'MODEL_RESPONSE',
                             success: true,
                             response: content,
                             done: false
@@ -923,7 +606,7 @@ async function handleOpenRouterRequest(prompt, modelId, hasImage = false, port =
         }
 
         const finalResponse = {
-            type: 'OLLAMA_RESPONSE',
+            type: 'MODEL_RESPONSE',
             success: true,
             response: '',
             done: true
@@ -939,5 +622,6 @@ async function handleOpenRouterRequest(prompt, modelId, hasImage = false, port =
         throw new Error(`OpenRouter API error: ${error.message}`);
     }
 }
+
 
 

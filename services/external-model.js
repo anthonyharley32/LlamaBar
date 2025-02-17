@@ -1,5 +1,6 @@
 import { ApiKeyManager } from '../utils/api-key-manager.js';
 
+
 export class ExternalModelService {
     static async generateResponse(provider, modelId, prompt, options = {}) {
         const handler = this.getProviderHandler(provider);
@@ -74,69 +75,11 @@ export class ExternalModelService {
     }
 
     static async *handleOpenAIStream(response) {
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        try {
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                    if (!line.trim() || line === 'data: [DONE]') continue;
-
-                    const jsonStr = line.replace(/^data: /, '').trim();
-                    if (!jsonStr) continue;
-
-                    try {
-                        const json = JSON.parse(jsonStr);
-                        const content = json.choices?.[0]?.delta?.content || '';
-                        if (content) {
-                            yield {
-                                type: 'success',
-                                content,
-                                done: false
-                            };
-                        }
-                    } catch (e) {
-                        console.error('Error parsing OpenAI SSE message:', e);
-                    }
-                }
-            }
-
-            // Handle any remaining buffer content
-            if (buffer.trim()) {
-                const jsonStr = buffer.replace(/^data: /, '').trim();
-                if (jsonStr && jsonStr !== '[DONE]') {
-                    try {
-                        const json = JSON.parse(jsonStr);
-                        const content = json.choices?.[0]?.delta?.content || '';
-                        if (content) {
-                            yield {
-                                type: 'success',
-                                content,
-                                done: false
-                            };
-                        }
-                    } catch (e) {
-                        console.error('Error parsing final buffer:', e);
-                    }
-                }
-            }
-
-            yield {
-                type: 'success',
-                content: '',
-                done: true
-            };
-        } finally {
-            reader.releaseLock();
-        }
+        return this.handleProviderStream(
+            response,
+            'OpenAI',
+            json => json.choices?.[0]?.delta?.content || ''
+        );
     }
 
     static async handleAnthropic(modelId, prompt, options = {}) {
@@ -190,9 +133,19 @@ export class ExternalModelService {
     }
 
     static async *handleAnthropicStream(response) {
+        return this.handleProviderStream(
+            response,
+            'Anthropic',
+            json => json.delta?.text || ''
+        );
+    }
+
+    // Generic streaming handler for all providers
+    static async *handleProviderStream(response, provider, contentExtractor) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let accumulatedContent = '';
 
         try {
             while (true) {
@@ -208,39 +161,79 @@ export class ExternalModelService {
                     
                     try {
                         const json = JSON.parse(line.replace(/^data: /, ''));
-                        const content = json.delta?.text || '';
+                        const content = contentExtractor(json);
                         if (content) {
+                            accumulatedContent += content;
                             yield {
-                                type: 'success',
-                                content,
+                                type: 'MODEL_RESPONSE',
+                                success: true,
+                                delta: {
+                                    content: content
+                                },
+                                response: accumulatedContent,
                                 done: false
                             };
                         }
                     } catch (e) {
-                        console.error('Error parsing Anthropic SSE message:', e);
+                        console.error(`Error parsing ${provider} SSE message:`, e);
                     }
                 }
             }
 
-            yield {
-                type: 'success',
-                content: '',
-                done: true
-            };
+            // Send completion signal
+            if (accumulatedContent) {
+                yield {
+                    type: 'MODEL_RESPONSE',
+                    success: true,
+                    delta: {
+                        content: ''
+                    },
+                    response: accumulatedContent,
+                    done: true
+                };
+            }
         } finally {
             reader.releaseLock();
         }
     }
 
-    // Similar implementations for Gemini, Perplexity, and OpenRouter...
     static async handleGemini(modelId, prompt, options = {}) {
         const apiKey = await ApiKeyManager.getApiKey('gemini');
         if (!apiKey) {
             throw new Error('Gemini API key not found');
         }
 
-        // Implementation similar to other providers...
-        throw new Error('Gemini implementation pending');
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${modelId}:streamGenerateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    role: 'user',
+                    parts: [{ text: prompt }]
+                }],
+                generationConfig: {
+                    temperature: 0.7,
+                    topK: 40,
+                    topP: 0.95,
+                    maxOutputTokens: 2048
+                }
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error?.message || `Gemini API error: ${response.status}`);
+        }
+
+        return this.handleGeminiStream(response);
+    }
+
+    static async *handleGeminiStream(response) {
+        return this.handleProviderStream(
+            response,
+            'Gemini',
+            json => json.candidates?.[0]?.content?.parts?.[0]?.text || ''
+        );
     }
 
     static async handlePerplexity(modelId, prompt, options = {}) {
@@ -249,8 +242,33 @@ export class ExternalModelService {
             throw new Error('Perplexity API key not found');
         }
 
-        // Implementation similar to other providers...
-        throw new Error('Perplexity implementation pending');
+        const response = await fetch('https://api.perplexity.ai/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: modelId,
+                messages: [{ role: 'user', content: prompt }],
+                stream: true
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error?.message || `Perplexity API error: ${response.status}`);
+        }
+
+        return this.handlePerplexityStream(response);
+    }
+
+    static async *handlePerplexityStream(response) {
+        return this.handleProviderStream(
+            response,
+            'Perplexity',
+            json => json.choices?.[0]?.delta?.content || ''
+        );
     }
 
     static async handleOpenRouter(modelId, prompt, options = {}) {
@@ -259,7 +277,34 @@ export class ExternalModelService {
             throw new Error('OpenRouter API key not found');
         }
 
-        // Implementation similar to other providers...
-        throw new Error('OpenRouter implementation pending');
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': chrome.runtime.getURL(''),
+                'X-Title': 'LlamaBar'
+            },
+            body: JSON.stringify({
+                model: modelId,
+                messages: [{ role: 'user', content: prompt }],
+                stream: true
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error?.message || `OpenRouter API error: ${response.status}`);
+        }
+
+        return this.handleOpenRouterStream(response);
+    }
+
+    static async *handleOpenRouterStream(response) {
+        return this.handleProviderStream(
+            response,
+            'OpenRouter',
+            json => json.choices?.[0]?.delta?.content || ''
+        );
     }
 } 

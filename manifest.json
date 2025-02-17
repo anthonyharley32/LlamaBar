@@ -39,7 +39,8 @@
         "components/*",
         "utils/*",
         "assets/*",
-        "lib/*"
+        "lib/*",
+        "*.js"
       ],
       "matches": ["<all_urls>"]
     }

@@ -153,8 +153,9 @@ export class LocalModelService {
         }
 
         return {
-            type: 'success',
-            content: data.message.content,
+            type: 'MODEL_RESPONSE',
+            success: true,
+            response: data.message.content,
             done: true
         };
     }
@@ -191,6 +192,7 @@ export class LocalModelService {
     static async *handleStreamingResponse(response) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        let accumulatedContent = '';
 
         try {
             while (true) {
@@ -206,9 +208,15 @@ export class LocalModelService {
                     try {
                         const data = JSON.parse(line);
                         if (data.response) {
+                            const newContent = data.response;
+                            accumulatedContent += newContent;
                             yield {
-                                type: 'success',
-                                content: data.response,
+                                type: 'MODEL_RESPONSE',
+                                success: true,
+                                delta: {
+                                    content: newContent
+                                },
+                                response: accumulatedContent,
                                 done: data.done
                             };
                         }
@@ -216,6 +224,19 @@ export class LocalModelService {
                         console.error('Error parsing response chunk:', e);
                     }
                 }
+            }
+
+            // Send final completion message if we have content
+            if (accumulatedContent) {
+                yield {
+                    type: 'MODEL_RESPONSE',
+                    success: true,
+                    delta: {
+                        content: ''
+                    },
+                    response: accumulatedContent,
+                    done: true
+                };
             }
         } finally {
             reader.releaseLock();

@@ -3,7 +3,9 @@
 <head>
     <title>Local AI Assistant</title>
     <link rel="stylesheet" href="styles/sidebar.css">
+    <script src="utils/error-handler.js" type="module"></script>
     <script src="lib/marked.min.js" defer></script>
+    <script src="sidebar.js" type="module"></script>
 </head>
 <body>
     <div class="sidebar-container">
@@ -130,8 +132,10 @@
         <div class="chat-container" id="chat-messages">
             <!-- Initial Message -->
             <div class="welcome-message">
-                <h2>Hi,</h2>
-                <p>How can I assist you today?</p>
+                <div class="welcome-content">
+                    <h2>Hi,</h2>
+                    <div class="welcome-text">How can I assist you today?</div>
+                </div>
             </div>
         </div>
 
@@ -169,6 +173,5 @@
             </div>
         </div>
     </div>
-    <script src="sidebar.js" type="module"></script>
 </body>
 </html> 
