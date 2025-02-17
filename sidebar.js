@@ -31,7 +31,7 @@ markdownToggle.addEventListener('change', (e) => {
 // Function to check if a model is local (Ollama-based)
 function isLocalModel(modelName) {
     // Add more local model prefixes as needed
-    const localPrefixes = ['llama', 'mistral', 'codellama', 'phi', 'neural-chat', 'starling', 'yi', 'stable-code',  'qwen', 'moondream'];
+    const localPrefixes = ['llama', 'mistral', 'codellama', 'phi', 'neural-chat', 'starling', 'yi', 'stable-code', 'qwen', 'moondream'];
     return localPrefixes.some(prefix => modelName.toLowerCase().startsWith(prefix.toLowerCase()));
 }
 
@@ -359,7 +359,7 @@ async function initializeModelSelector() {
                     const option = document.createElement('option');
                     option.value = `local:${model.name}`;
                     option.textContent = model.name;
-                    if (model.name === currentModel) {
+                    if (`local:${model.name}` === currentModel) {
                         option.selected = true;
                     }
                     localModelsOptgroup.appendChild(option);
@@ -400,6 +400,9 @@ async function initializeModelSelector() {
                         const option = document.createElement('option');
                         option.value = `${provider}:${model.id}`;
                         option.textContent = `${model.name} (${provider})`;
+                        if (option.value === currentModel) {
+                            option.selected = true;
+                        }
                         apiModelsOptgroup.appendChild(option);
                     });
                 }
@@ -420,7 +423,7 @@ async function initializeModelSelector() {
             showToast('No models available. Please check your configuration.', 'error');
         }
         
-        // Update Ollama logo visibility
+        // Update Ollama logo visibility based on provider
         const [provider] = currentModel.split(':');
         ollamaLogo.style.display = provider === 'local' ? 'block' : 'none';
         
@@ -625,10 +628,12 @@ function handleUserInput(text) {
     // Create a new assistant message div that will be updated with streaming content
     currentAssistantMessage = addMessage('assistant', '');
     
+    const [provider, modelId] = currentModel.split(':');
+    
     // Check if current model supports vision
-    const isVisionModel = currentModel.toLowerCase().includes('vision') || 
-                         currentModel.toLowerCase().includes('dream') || 
-                         currentModel.toLowerCase().includes('image');
+    const isVisionModel = modelId.toLowerCase().includes('vision') || 
+                         modelId.toLowerCase().includes('dream') || 
+                         modelId.toLowerCase().includes('image');
     
     // Prepare the prompt based on whether there's an image and markdown mode
     let prompt = text;
@@ -649,9 +654,10 @@ function handleUserInput(text) {
     }
     
     console.log('Sending query:', {
+        provider,
+        modelId,
         modelType: isVisionModel ? 'vision' : 'text',
         hasImage: !!currentImage,
-        model: currentModel,
         markdownEnabled
     });
     
