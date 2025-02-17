@@ -241,11 +241,72 @@ export class ExternalModelService {
     }
 
     static async *handleAnthropicStream(response) {
-        return this.handleProviderStream(
-            response,
-            'Anthropic',
-            json => json.delta?.text || ''
-        );
+        console.log('🔄 Initializing Anthropic stream handler');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let accumulatedContent = '';
+
+        try {
+            while (true) {
+                const { value, done } = await reader.read();
+                
+                if (done) {
+                    console.log('🏁 Anthropic stream complete');
+                    if (accumulatedContent) {
+                        yield {
+                            type: 'MODEL_RESPONSE',
+                            success: true,
+                            delta: { content: '' },
+                            response: accumulatedContent,
+                            done: true
+                        };
+                    }
+                    break;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    if (line === 'data: [DONE]') {
+                        console.log('🏁 Received DONE marker');
+                        yield {
+                            type: 'MODEL_RESPONSE',
+                            success: true,
+                            delta: { content: '' },
+                            response: accumulatedContent,
+                            done: true
+                        };
+                        continue;
+                    }
+
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const jsonData = JSON.parse(line.slice(6));
+                            const content = jsonData.delta?.text || '';
+                            if (content) {
+                                accumulatedContent += content;
+                                yield {
+                                    type: 'MODEL_RESPONSE',
+                                    success: true,
+                                    delta: { content },
+                                    response: accumulatedContent,
+                                    done: false
+                                };
+                            }
+                        } catch (e) {
+                            console.warn('⚠️ Error parsing Anthropic JSON:', e);
+                            continue;
+                        }
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
     }
 
     // Generic streaming handler for all providers
@@ -374,20 +435,15 @@ export class ExternalModelService {
             throw new Error('Gemini API key not found');
         }
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${modelId}:streamGenerateContent?key=${apiKey}`, {
+        // Use the correct model format
+        const model = modelId.replace('gemini:', '');
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{
-                    role: 'user',
                     parts: [{ text: prompt }]
-                }],
-                generationConfig: {
-                    temperature: 0.7,
-                    topK: 40,
-                    topP: 0.95,
-                    maxOutputTokens: 2048
-                }
+                }]
             })
         });
 
@@ -396,15 +452,13 @@ export class ExternalModelService {
             throw new Error(error.error?.message || `Gemini API error: ${response.status}`);
         }
 
-        return this.handleGeminiStream(response);
-    }
-
-    static async *handleGeminiStream(response) {
-        return this.handleProviderStream(
-            response,
-            'Gemini',
-            json => json.candidates?.[0]?.content?.parts?.[0]?.text || ''
-        );
+        const result = await response.json();
+        return {
+            type: 'MODEL_RESPONSE',
+            success: true,
+            response: result.candidates?.[0]?.content?.parts?.[0]?.text || '',
+            done: true
+        };
     }
 
     static async handlePerplexity(modelId, prompt, options = {}) {
@@ -435,11 +489,72 @@ export class ExternalModelService {
     }
 
     static async *handlePerplexityStream(response) {
-        return this.handleProviderStream(
-            response,
-            'Perplexity',
-            json => json.choices?.[0]?.delta?.content || ''
-        );
+        console.log('🔄 Initializing Perplexity stream handler');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let accumulatedContent = '';
+
+        try {
+            while (true) {
+                const { value, done } = await reader.read();
+                
+                if (done) {
+                    console.log('🏁 Perplexity stream complete');
+                    if (accumulatedContent) {
+                        yield {
+                            type: 'MODEL_RESPONSE',
+                            success: true,
+                            delta: { content: '' },
+                            response: accumulatedContent,
+                            done: true
+                        };
+                    }
+                    break;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    if (line === 'data: [DONE]') {
+                        console.log('🏁 Received DONE marker');
+                        yield {
+                            type: 'MODEL_RESPONSE',
+                            success: true,
+                            delta: { content: '' },
+                            response: accumulatedContent,
+                            done: true
+                        };
+                        continue;
+                    }
+
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const jsonData = JSON.parse(line.slice(6));
+                            const content = jsonData.choices?.[0]?.delta?.content || '';
+                            if (content) {
+                                accumulatedContent += content;
+                                yield {
+                                    type: 'MODEL_RESPONSE',
+                                    success: true,
+                                    delta: { content },
+                                    response: accumulatedContent,
+                                    done: false
+                                };
+                            }
+                        } catch (e) {
+                            console.warn('⚠️ Error parsing Perplexity JSON:', e);
+                            continue;
+                        }
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
     }
 
     static async handleOpenRouter(modelId, prompt, options = {}) {
@@ -472,10 +587,71 @@ export class ExternalModelService {
     }
 
     static async *handleOpenRouterStream(response) {
-        return this.handleProviderStream(
-            response,
-            'OpenRouter',
-            json => json.choices?.[0]?.delta?.content || ''
-        );
+        console.log('🔄 Initializing OpenRouter stream handler');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let accumulatedContent = '';
+
+        try {
+            while (true) {
+                const { value, done } = await reader.read();
+                
+                if (done) {
+                    console.log('🏁 OpenRouter stream complete');
+                    if (accumulatedContent) {
+                        yield {
+                            type: 'MODEL_RESPONSE',
+                            success: true,
+                            delta: { content: '' },
+                            response: accumulatedContent,
+                            done: true
+                        };
+                    }
+                    break;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    if (line === 'data: [DONE]') {
+                        console.log('🏁 Received DONE marker');
+                        yield {
+                            type: 'MODEL_RESPONSE',
+                            success: true,
+                            delta: { content: '' },
+                            response: accumulatedContent,
+                            done: true
+                        };
+                        continue;
+                    }
+
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const jsonData = JSON.parse(line.slice(6));
+                            const content = jsonData.choices?.[0]?.delta?.content || '';
+                            if (content) {
+                                accumulatedContent += content;
+                                yield {
+                                    type: 'MODEL_RESPONSE',
+                                    success: true,
+                                    delta: { content },
+                                    response: accumulatedContent,
+                                    done: false
+                                };
+                            }
+                        } catch (e) {
+                            console.warn('⚠️ Error parsing OpenRouter JSON:', e);
+                            continue;
+                        }
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
     }
 } 

@@ -7,6 +7,16 @@ import { ApiService } from './utils/api-service.js';
 console.log('✅ Imports successful');
 console.log('🚀 Sidebar script starting...');
 
+// Global variables and constants
+const logoMap = {
+    'local': 'ollama.jpg',
+    'openai': 'openai.jpg',
+    'anthropic': 'claude.jpg',
+    'gemini': 'gemini.webp',
+    'perplexity': 'perplexity.png',
+    'openrouter': 'openrouter.jpeg'
+};
+
 // Wrap initialization in error handler
 try {
     // DOM Elements
@@ -278,9 +288,15 @@ try {
             saveButton.disabled = true;
 
             // First validate the key
-            const isValid = await validateApiKey(provider, apiKey);
-            if (!isValid) {
-                throw new Error('Invalid API key format');
+            try {
+                const isValid = await validateApiKey(provider, apiKey);
+                if (!isValid) {
+                    throw new Error('Invalid API key format');
+                }
+            } catch (error) {
+                saveButton.textContent = originalText;
+                saveButton.disabled = false;
+                throw error;
             }
             
             // Save the key if validation passed
@@ -296,21 +312,27 @@ try {
             await updateProviderStatus(provider);
             showToast(`${provider} API key saved successfully!`);
             
-            // Save all models as enabled by default
-            await ApiKeyManager.saveEnabledModels(provider, models.map(m => m.id));
+            // For Gemini, the models are already saved during validation
+            if (provider !== 'gemini') {
+                // Save all models as enabled by default
+                await ApiKeyManager.saveEnabledModels(provider, models.map(m => m.id));
+            }
             
             // Update the model selector
             await initializeModelSelector();
             
-            // Close the dropdown
+            // Reset button state and close the dropdown
+            saveButton.textContent = originalText;
+            saveButton.disabled = false;
             apiKeyInput.classList.remove('show');
             
         } catch (error) {
             console.error(`Error saving API key for ${provider}:`, error);
             showToast(`Error: ${error.message}`, 'error');
+            
             saveButton.textContent = originalText;
             saveButton.disabled = false;
-            // Remove the API key and checkmark if validation failed
+            
             await ApiKeyManager.deleteApiKey(provider);
             await updateProviderStatus(provider);
         }
@@ -337,20 +359,57 @@ try {
                 }
                 
                 const data = await response.json();
-                const availableModels = data.data.filter(model => {
+                // Filter for specific OpenAI models
+                const supportedModels = data.data.filter(model => {
                     const id = model.id.toLowerCase();
                     return (
-                        id.startsWith('o') ||
-                        id.includes('gpt-4o') ||
-                        id.includes('gpt-4') ||
-                        id.includes('gpt-3.5') ||
-                        id.match(/gpt-[5-9]/)
-                    ) && !id.includes('instruct');
-                });
+                        // o-series models
+                        id === 'o1' ||  // o1 base
+                        id === 'o1-mini' ||  // o1 mini
+                        id === 'o3-mini' ||  // o3 mini base
+                        id === 'o3-mini-high' ||  // o3 mini high
+                        // GPT-4o models
+                        id === 'gpt-4o' ||  // GPT-4o base
+                        id === 'gpt-4o-mini'  // GPT-4o mini
+                    );
+                }).map(model => ({
+                    id: model.id,
+                    name: model.id
+                    .replace(/^gpt-/i, 'GPT-')  // Keep 'gpt' lowercase
+                        .trim()
+                }));
                 
-                if (availableModels.length === 0) {
+                if (supportedModels.length === 0) {
                     throw new Error('No supported models available for this API key');
                 }
+                
+                return true;
+
+            case 'gemini':
+                // Test the API key by making a simple request to list models
+                const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+                
+                if (!geminiResponse.ok) {
+                    if (geminiResponse.status === 401 || geminiResponse.status === 403) {
+                        throw new Error('Invalid API key');
+                    }
+                    throw new Error(`Gemini API error: ${geminiResponse.status}`);
+                }
+                
+                const geminiData = await geminiResponse.json();
+                const geminiModels = geminiData.models || [];
+                
+                // Check specifically for gemini-pro model
+                const hasGeminiPro = geminiModels.some(model => 
+                    model.name.includes('gemini-pro') || model.name.includes('models/gemini-pro')
+                );
+                
+                if (!hasGeminiPro) {
+                    throw new Error('Gemini Pro model is not available for this API key');
+                }
+                
+                // Save gemini-pro as the enabled model
+                await ApiKeyManager.saveEnabledModels('gemini', ['gemini-pro']);
                 
                 return true;
                 
@@ -368,12 +427,49 @@ try {
         }
     }
 
-    // Update model selector to include API models
+    // Update model selection handler
+    modelSelector.addEventListener('change', async (e) => {
+        currentModel = e.target.value;
+        console.log('Model changed to:', currentModel);
+        
+        // Update provider logo
+        updateProviderLogo(currentModel);
+    });
+
+    // Function to update provider logo
+    function updateProviderLogo(modelId) {
+        const [provider] = modelId.split(':');
+        const logoContainer = document.querySelector('.model-selector-container');
+        let logoImg = logoContainer.querySelector('.provider-logo');
+        
+        if (!logoImg) {
+            logoImg = document.createElement('img');
+            logoImg.className = 'provider-logo';
+            logoContainer.insertBefore(logoImg, modelSelector);
+        }
+
+        const logoFile = logoMap[provider];
+        if (logoFile) {
+            logoImg.src = chrome.runtime.getURL(`assets/${logoFile}`);
+            logoImg.style.display = 'block';
+        } else {
+            logoImg.style.display = 'none';
+        }
+    }
+
+    // Initialize model selector and setup wizard
     async function initializeModelSelector() {
         try {
             console.log('Initializing model selector...');
+            const customSelect = document.getElementById('model-selector');
+            const selectSelected = customSelect.querySelector('.select-selected');
+            const selectItems = customSelect.querySelector('.select-items');
+            const selectedText = selectSelected.querySelector('.selected-text');
+            const selectedLogo = selectSelected.querySelector('.provider-logo');
+            
             // Clear existing options
-            modelSelector.innerHTML = '';
+            selectItems.innerHTML = '';
+            let sections = [];
             
             // Get local models from Ollama
             try {
@@ -382,19 +478,34 @@ try {
                     const data = await response.json();
                     console.log('Local models found:', data.models);
                     
-                    // Add local models
-                    const localModelsOptgroup = document.createElement('optgroup');
-                    localModelsOptgroup.label = 'Local Models';
-                    data.models.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = `local:${model.name}`;  // Keep full model name after local: prefix
-                        option.textContent = model.name;
-                        if (option.value === currentModel) {
-                            option.selected = true;
-                        }
-                        localModelsOptgroup.appendChild(option);
-                    });
-                    modelSelector.appendChild(localModelsOptgroup);
+                    if (data.models.length > 0) {
+                        const localSection = document.createElement('div');
+                        localSection.className = 'provider-section';
+                        localSection.innerHTML = `
+                            <div class="provider-header">
+                                <img class="provider-logo" src="${chrome.runtime.getURL('assets/ollama.jpg')}" alt="Ollama">
+                                <span>Local Models</span>
+                            </div>
+                        `;
+                        
+                        data.models.forEach(model => {
+                            const option = document.createElement('div');
+                            option.className = 'model-option';
+                            option.dataset.value = `local:${model.name}`;
+                            option.innerHTML = `
+                                <img class="provider-logo" src="${chrome.runtime.getURL('assets/ollama.jpg')}" alt="Ollama">
+                                <span>${model.name}</span>
+                            `;
+                            if (`local:${model.name}` === currentModel) {
+                                option.classList.add('selected');
+                                selectedText.textContent = model.name;
+                                selectedLogo.src = chrome.runtime.getURL('assets/ollama.jpg');
+                            }
+                            localSection.appendChild(option);
+                        });
+                        
+                        sections.push(localSection);
+                    }
                 }
             } catch (error) {
                 console.warn('Could not fetch local models:', error);
@@ -405,10 +516,6 @@ try {
             console.log('Found providers with keys:', providers);
             
             if (providers.length > 0) {
-                const apiModelsOptgroup = document.createElement('optgroup');
-                apiModelsOptgroup.label = 'API Models';
-                
-                // Add models for each provider
                 for (const provider of providers) {
                     console.log(`Fetching models for ${provider}...`);
                     const enabledModels = await ApiKeyManager.getEnabledModels(provider);
@@ -426,41 +533,90 @@ try {
                         const filteredModels = availableModels.filter(model => enabledModels.includes(model.id));
                         console.log(`Filtered models for ${provider}:`, filteredModels);
                         
-                        filteredModels.forEach(model => {
-                            const option = document.createElement('option');
-                            option.value = `${provider}:${model.id}`;
-                            option.textContent = `${model.name} (${provider})`;
-                            if (option.value === currentModel) {
-                                option.selected = true;
-                            }
-                            apiModelsOptgroup.appendChild(option);
-                        });
+                        if (filteredModels.length > 0) {
+                            const providerSection = document.createElement('div');
+                            providerSection.className = 'provider-section';
+                            const logoFile = logoMap[provider];
+                            providerSection.innerHTML = `
+                                <div class="provider-header">
+                                    <img class="provider-logo" src="${chrome.runtime.getURL(`assets/${logoFile}`)}" alt="${provider}">
+                                    <span>${provider.charAt(0).toUpperCase() + provider.slice(1)} Models</span>
+                                </div>
+                            `;
+                            
+                            filteredModels.forEach(model => {
+                                const option = document.createElement('div');
+                                option.className = 'model-option';
+                                const modelId = model.id.includes('/') ? model.id.split('/')[1] : model.id;
+                                option.dataset.value = `${provider}:${modelId}`;
+                                option.innerHTML = `
+                                    <img class="provider-logo" src="${chrome.runtime.getURL(`assets/${logoFile}`)}" alt="${provider}">
+                                    <span>${model.name}</span>
+                                `;
+                                if (`${provider}:${modelId}` === currentModel) {
+                                    option.classList.add('selected');
+                                    selectedText.textContent = model.name;
+                                    selectedLogo.src = chrome.runtime.getURL(`assets/${logoFile}`);
+                                }
+                                providerSection.appendChild(option);
+                            });
+                            
+                            sections.push(providerSection);
+                        }
                     }
-                }
-                
-                if (apiModelsOptgroup.children.length > 0) {
-                    modelSelector.appendChild(apiModelsOptgroup);
                 }
             }
             
+            // Add sections to dropdown
+            sections.forEach(section => selectItems.appendChild(section));
+            
             // If no models are available, show error
-            if (modelSelector.children.length === 0) {
+            if (sections.length === 0) {
                 console.error('No models available in selector');
-                const option = document.createElement('option');
-                option.value = 'none';
-                option.textContent = 'No models available';
-                modelSelector.appendChild(option);
+                selectedText.textContent = 'No models available';
+                selectedLogo.style.display = 'none';
                 showToast('No models available. Please check your configuration.', 'error');
             }
             
-            // Update Ollama logo visibility based on provider
-            const [provider] = currentModel.split(':');
-            ollamaLogo.style.display = provider === 'local' ? 'block' : 'none';
+            // Toggle dropdown
+            selectSelected.addEventListener('click', (e) => {
+                e.stopPropagation();
+                customSelect.classList.toggle('open');
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', () => {
+                customSelect.classList.remove('open');
+            });
+            
+            // Handle model selection
+            selectItems.addEventListener('click', async (e) => {
+                const option = e.target.closest('.model-option');
+                if (option) {
+                    const value = option.dataset.value;
+                    const [provider] = value.split(':');
+                    
+                    // Update selected option
+                    currentModel = value;
+                    selectedText.textContent = option.textContent;
+                    selectedLogo.src = chrome.runtime.getURL(`assets/${logoMap[provider]}`);
+                    
+                    // Update selected state
+                    selectItems.querySelectorAll('.model-option').forEach(opt => {
+                        opt.classList.toggle('selected', opt === option);
+                    });
+                    
+                    // Close dropdown
+                    customSelect.classList.remove('open');
+                    
+                    console.log('Model changed to:', currentModel);
+                }
+            });
             
         } catch (error) {
             console.error('Error initializing model selector:', error);
-            modelSelector.innerHTML = '<option value="error">Error loading models</option>';
-            ollamaLogo.style.display = 'none';
+            const selectedText = document.querySelector('.selected-text');
+            selectedText.textContent = 'Error loading models';
             showToast('Failed to load models. Please check your configuration.', 'error');
         }
     }
@@ -492,32 +648,23 @@ try {
 
                 const data = await response.json();
                 
-                // Filter for all supported model families
+                // Filter for specific OpenAI models
                 const supportedModels = data.data.filter(model => {
                     const id = model.id.toLowerCase();
-                    // Include all current and future model families
                     return (
-                        // o-series models (reasoning models)
-                        id.startsWith('o') ||
-                        // GPT-4o (Omni) models
-                        id.includes('gpt-4o') ||
-                        // GPT-4 models (including Turbo and Vision)
-                        id.includes('gpt-4') ||
-                        // GPT-3.5 models
-                        id.includes('gpt-3.5') ||
-                        // Future GPT models (5+)
-                        id.match(/gpt-[5-9]/)
-                    ) && (
-                        // Exclude instruction-only models
-                        !id.includes('instruct')
+                        // o-series models
+                        id === 'o1' ||  // o1 base
+                        id === 'o1-mini' ||  // o1 mini
+                        id === 'o3-mini' ||  // o3 mini base
+                        id === 'o3-mini-high' ||  // o3 mini high
+                        // GPT-4o models
+                        id === 'gpt-4o' ||  // GPT-4o base
+                        id === 'gpt-4o-mini'  // GPT-4o mini
                     );
                 }).map(model => ({
                     id: model.id,
-                    // Keep version numbers and capabilities in the display name
                     name: model.id
-                        .replace(/^gpt-/i, 'GPT-')  // Capitalize GPT
-                        .replace(/^o([0-9])/, 'O$1')  // Capitalize O-series
-                        .replace(/-/g, ' ')  // Replace hyphens with spaces
+                        .replace(/^gpt-/i, 'GPT-')  // Keep 'gpt' lowercase
                         .trim()
                 }));
                 
@@ -546,34 +693,12 @@ try {
                 { id: 'pplx-7b-online', name: 'Perplexity 7B' }
             ],
             gemini: [
-                { id: 'gemini-pro', name: 'Gemini Pro' },
-                { id: 'gemini-pro-vision', name: 'Gemini Pro Vision' }
+                { id: 'gemini-pro', name: 'Gemini Pro' }
             ]
         };
         
         return models[provider] || [];
     }
-
-    // Update model selection handler
-    modelSelector.addEventListener('change', async (e) => {
-        currentModel = e.target.value;
-        console.log('Model changed to:', currentModel);
-        
-        // Update Ollama logo visibility
-        ollamaLogo.style.display = currentModel.startsWith('local:') ? 'block' : 'none';
-        
-        // Verify API key if needed
-        if (!currentModel.startsWith('local:')) {
-            const [provider] = currentModel.split(':');
-            const hasKey = await ApiKeyManager.hasApiKey(provider);
-            if (!hasKey) {
-                showToast(`Please add your ${provider} API key first`, 'error');
-                // Reset to previous selection
-                initializeModelSelector();
-                return;
-            }
-        }
-    });
 
     // Handle image paste
     async function handleImagePaste(e) {

@@ -35,12 +35,17 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "styles/*",
-        "components/*",
-        "utils/*",
-        "assets/*",
-        "lib/*",
-        "*.js"
+        "sidebar.html",
+        "components/setup-wizard.html",
+        "assets/ollama.jpg",
+        "assets/openai.jpg",
+        "assets/claude.jpg",
+        "assets/gemini.webp",
+        "assets/perplexity.png",
+        "assets/openrouter.jpeg",
+        "assets/icon16.jpg",
+        "assets/icon48.jpg",
+        "assets/icon128.jpg"
       ],
       "matches": ["<all_urls>"]
     }

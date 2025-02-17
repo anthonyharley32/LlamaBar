@@ -17,10 +17,18 @@
                 </div>
                 <div class="header-controls">
                     <div class="model-selector-container">
-                        <img id="ollama-logo" class="ollama-logo" src="assets/ollama.jpg" alt="Ollama" style="display: none;">
-                        <select id="model-selector" class="model-selector">
-                            <option value="loading">Loading models...</option>
-                        </select>
+                        <div class="custom-select" id="model-selector">
+                            <div class="select-selected">
+                                <img class="provider-logo" src="assets/ollama.jpg" alt="Provider Logo">
+                                <span class="selected-text">Loading models...</span>
+                                <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                            <div class="select-items">
+                                <!-- Will be populated by JavaScript -->
+                            </div>
+                        </div>
                     </div>
                     <div class="settings-dropdown">
                         <button id="settings-button" class="settings-button">

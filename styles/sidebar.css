@@ -133,10 +133,137 @@ input:checked + .slider:before {
     width: 100%;
 }
 
+.custom-select {
+    position: relative;
+    width: 100%;
+}
+
+.select-selected {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--background-color);
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.select-selected:hover {
+    border-color: var(--primary-color);
+}
+
+.select-selected .provider-logo {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.select-selected .selected-text {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-left: 4px;
+}
+
+.select-selected .chevron-icon {
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+.custom-select.open .chevron-icon {
+    transform: rotate(180deg);
+}
+
+.select-items {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 300px;
+    margin-top: 4px;
+    background: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px var(--shadow-color);
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+}
+
+.custom-select.open .select-items {
+    display: block;
+}
+
+.provider-section {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.provider-section:last-child {
+    border-bottom: none;
+}
+
+.provider-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--message-bg);
+    font-weight: 500;
+}
+
+.provider-header .provider-logo {
+    width: 20px;
+    height: 20px;
+}
+
+.model-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.model-option span {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.model-option .provider-logo {
+    width: 20px;
+    height: 20px;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+    border-radius: 4px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.model-option:hover {
+    background-color: var(--hover-color);
+}
+
+.model-option.selected {
+    background-color: var(--hover-color);
+    font-weight: 500;
+}
+
 .model-selector {
     width: 100%;
     padding: 8px;
-    padding-right: 36px; /* Increased padding to make room for the shifted logo */
+    padding-right: 36px;
+    padding-left: 36px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
     background: var(--background-color);
@@ -145,20 +272,6 @@ input:checked + .slider:before {
     cursor: pointer;
     outline: none;
     transition: border-color 0.2s;
-}
-
-.ollama-logo {
-    position: relative;
-    right: 12px; /* Changed from 8px to 12px to move it left relative to the selector edge */
-    width: 20px;
-    height: 20px;
-    pointer-events: none;
-    opacity: 0.8;
-    transition: opacity 0.2s;
-}
-
-.ollama-logo:hover {
-    opacity: 1;
 }
 
 .model-selector:hover {
