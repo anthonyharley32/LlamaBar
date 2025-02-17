@@ -22,64 +22,172 @@ export class ExternalModelService {
     }
 
     static async handleOpenAI(modelId, prompt, options = {}) {
-        const apiKey = await ApiKeyManager.getApiKey('openai');
-        if (!apiKey) {
-            throw new Error('OpenAI API key not found');
-        }
+        try {
+            console.log('🚀 Starting OpenAI request handler:', { modelId, hasImage: options.hasImage });
+            const apiKey = await ApiKeyManager.getApiKey('openai');
+            if (!apiKey) {
+                throw new Error('OpenAI API key not found');
+            }
+            console.log('✅ API key retrieved successfully');
 
-        const messages = [];
-        if (options.hasImage) {
-            const base64Image = prompt.match(/<image>(.*?)<\/image>/)?.[1];
-            const text = prompt.replace(/<image>.*?<\/image>\n?/, '').trim();
-            
-            if (!base64Image) {
-                throw new Error('Image data is missing or invalid');
+            const messages = [];
+            if (options.hasImage) {
+                const base64Image = prompt.match(/<image>(.*?)<\/image>/)?.[1];
+                const text = prompt.replace(/<image>.*?<\/image>\n?/, '').trim();
+                
+                if (!base64Image) {
+                    throw new Error('Image data is missing or invalid');
+                }
+
+                messages.push({
+                    role: 'user',
+                    content: [
+                        { type: 'text', text },
+                        {
+                            type: 'image_url',
+                            image_url: { url: base64Image }
+                        }
+                    ]
+                });
+            } else {
+                messages.push({
+                    role: 'user',
+                    content: prompt
+                });
             }
 
-            messages.push({
-                role: 'user',
-                content: [
-                    { type: 'text', text },
-                    {
-                        type: 'image_url',
-                        image_url: { url: base64Image }
-                    }
-                ]
+            console.log('📝 Preparing OpenAI API request:', {
+                modelId,
+                messageCount: messages.length,
+                firstMessageContent: messages[0].content
             });
-        } else {
-            messages.push({
-                role: 'user',
-                content: prompt
-            });
-        }
 
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
+            const requestBody = {
                 model: modelId,
                 messages,
                 stream: true
-            })
-        });
+            };
+            console.log('📦 Request body prepared:', requestBody);
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error?.message || `OpenAI API error: ${response.status}`);
+            console.log('🌐 Making OpenAI API request...');
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            console.log('📨 Received response from OpenAI:', {
+                status: response.status,
+                statusText: response.statusText,
+                headers: Object.fromEntries(response.headers.entries())
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('❌ OpenAI API error:', errorData);
+                throw new Error(errorData.error?.message || `OpenAI API error: ${response.status}`);
+            }
+
+            if (!response.body) {
+                console.error('❌ Response body is null');
+                throw new Error('Response body is null');
+            }
+
+            console.log('✨ OpenAI request successful, initializing stream handler');
+            return ExternalModelService.handleOpenAIStream(response);
+        } catch (error) {
+            console.error('💥 Error in handleOpenAI:', error);
+            throw error;
         }
-
-        return ExternalModelService.handleOpenAIStream(response);
     }
 
     static async *handleOpenAIStream(response) {
-        return this.handleProviderStream(
-            response,
-            'OpenAI',
-            json => json.choices?.[0]?.delta?.content || ''
-        );
+        console.log('🔄 Initializing OpenAI stream handler');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let accumulatedContent = '';
+
+        try {
+            while (true) {
+                const { value, done } = await reader.read();
+                
+                if (done) {
+                    console.log('🏁 Stream complete');
+                    if (accumulatedContent) {
+                        yield {
+                            type: 'MODEL_RESPONSE',
+                            success: true,
+                            delta: { content: '' },
+                            response: accumulatedContent,
+                            done: true
+                        };
+                    }
+                    break;
+                }
+
+                // Decode the chunk and add to buffer
+                buffer += decoder.decode(value, { stream: true });
+                console.log('📦 Received chunk:', buffer);
+
+                // Process complete messages in buffer
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                    console.log('🔍 Processing line:', line);
+                    
+                    // Skip empty lines
+                    if (!line.trim()) {
+                        console.log('⏭️ Skipping empty line');
+                        continue;
+                    }
+
+                    // Check for end of stream
+                    if (line === 'data: [DONE]') {
+                        console.log('🏁 Received DONE marker');
+                        yield {
+                            type: 'MODEL_RESPONSE',
+                            success: true,
+                            delta: { content: '' },
+                            response: accumulatedContent,
+                            done: true
+                        };
+                        continue;
+                    }
+
+                    // Process data line
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const jsonData = JSON.parse(line.slice(6)); // Remove 'data: ' prefix
+                            console.log('📄 Parsed JSON:', jsonData);
+
+                            const content = jsonData.choices?.[0]?.delta?.content || '';
+                            if (content) {
+                                console.log('✨ Extracted content:', content);
+                                accumulatedContent += content;
+                                
+                                yield {
+                                    type: 'MODEL_RESPONSE',
+                                    success: true,
+                                    delta: { content },
+                                    response: accumulatedContent,
+                                    done: false
+                                };
+                            }
+                        } catch (e) {
+                            console.warn('⚠️ Error parsing JSON:', e);
+                            continue;
+                        }
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
     }
 
     static async handleAnthropic(modelId, prompt, options = {}) {
@@ -142,57 +250,120 @@ export class ExternalModelService {
 
     // Generic streaming handler for all providers
     static async *handleProviderStream(response, provider, contentExtractor) {
+        console.log(`🌊 Starting ${provider} stream handler`);
         const reader = response.body.getReader();
+        console.log('📖 Stream reader created');
         const decoder = new TextDecoder();
         let buffer = '';
         let accumulatedContent = '';
+        let chunkCounter = 0;
 
         try {
+            console.log('🔄 Entering stream processing loop');
             while (true) {
+                console.log(`⏳ Reading chunk #${++chunkCounter}`);
                 const { value, done } = await reader.read();
-                if (done) break;
+                
+                if (done) {
+                    console.log(`✅ ${provider} stream complete after ${chunkCounter} chunks`);
+                    // Yield final accumulated content if any
+                    if (accumulatedContent) {
+                        yield {
+                            type: 'MODEL_RESPONSE',
+                            success: true,
+                            delta: { content: '' },
+                            response: accumulatedContent,
+                            done: true
+                        };
+                    }
+                    break;
+                }
 
-                buffer += decoder.decode(value, { stream: true });
+                const chunk = decoder.decode(value, { stream: true });
+                console.log(`📦 Raw ${provider} chunk #${chunkCounter}:`, {
+                    length: chunk.length,
+                    preview: chunk.slice(0, 100)
+                });
+
+                buffer += chunk;
                 const lines = buffer.split('\n');
                 buffer = lines.pop() || '';
 
+                console.log(`📝 Processing ${lines.length} lines from chunk`);
                 for (const line of lines) {
-                    if (!line.trim() || line === 'data: [DONE]') continue;
+                    if (!line.trim()) {
+                        console.log('⏭️ Skipping empty line');
+                        continue;
+                    }
+                    if (line === 'data: [DONE]') {
+                        console.log('🏁 Stream done marker received');
+                        // Yield final state
+                        yield {
+                            type: 'MODEL_RESPONSE',
+                            success: true,
+                            delta: { content: '' },
+                            response: accumulatedContent,
+                            done: true
+                        };
+                        continue;
+                    }
                     
                     try {
-                        const json = JSON.parse(line.replace(/^data: /, ''));
+                        const cleanLine = line.replace(/^data: /, '');
+                        console.log(`🔍 Processing line:`, cleanLine);
+                        
+                        let json;
+                        try {
+                            json = JSON.parse(cleanLine);
+                        } catch (e) {
+                            console.warn(`⚠️ Failed to parse JSON, skipping line:`, e);
+                            continue;  // Skip this line but continue processing
+                        }
+                        
                         const content = contentExtractor(json);
+                        console.log(`📄 Extracted content:`, { content });
+                        
                         if (content) {
                             accumulatedContent += content;
+                            console.log(`📬 Yielding content:`, {
+                                newContent: content,
+                                totalLength: accumulatedContent.length
+                            });
+                            
                             yield {
                                 type: 'MODEL_RESPONSE',
                                 success: true,
-                                delta: {
-                                    content: content
-                                },
+                                delta: { content },
                                 response: accumulatedContent,
                                 done: false
                             };
                         }
                     } catch (e) {
-                        console.error(`Error parsing ${provider} SSE message:`, e);
+                        console.warn(`⚠️ Error processing line:`, {
+                            error: e,
+                            line: line
+                        });
+                        // Continue processing instead of throwing
+                        continue;
                     }
                 }
             }
-
-            // Send completion signal
+        } catch (error) {
+            console.error(`❌ Fatal error in stream handler:`, error);
+            // Yield error state if we have content
             if (accumulatedContent) {
                 yield {
                     type: 'MODEL_RESPONSE',
                     success: true,
-                    delta: {
-                        content: ''
-                    },
+                    delta: { content: '' },
                     response: accumulatedContent,
-                    done: true
+                    done: true,
+                    error: error.message
                 };
             }
+            throw error;
         } finally {
+            console.log('🔒 Releasing stream reader');
             reader.releaseLock();
         }
     }

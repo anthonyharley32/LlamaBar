@@ -6,8 +6,11 @@ const MIN_TIME_BETWEEN_UPDATES = 50; // Milliseconds - reduced for smoother stre
 
 export class MessageRouter {
     static async routeModelRequest(message, port = null, sendResponse = null) {
+        console.log('🚀 Starting model request routing');
+        
         // Send initial response immediately to keep channel open
         if (sendResponse) {
+            console.log('📤 Sending initial response to keep channel open');
             sendResponse({ success: true, streaming: true });
         }
 
@@ -21,99 +24,127 @@ export class MessageRouter {
                 [provider, modelId] = message.model.split(':');
             }
             
-            console.log('Routing model request:', {
+            console.log('🎯 Model request details:', {
                 provider,
                 modelId,
                 hasImage: message.hasImage,
-                promptLength: message.prompt.length
+                promptLength: message.prompt.length,
+                isLocal: provider === 'local'
             });
 
             let responseGenerator;
-            if (provider === 'local') {
-                responseGenerator = await LocalModelService.generateResponse(
-                    message.prompt,
-                    modelId,
-                    {
-                        hasImage: message.hasImage
-                    }
-                );
-            } else {
-                responseGenerator = await ExternalModelService.generateResponse(
-                    provider,
-                    modelId,
-                    message.prompt,
-                    {
-                        hasImage: message.hasImage
-                    }
-                );
-            }
+            try {
+                if (provider === 'local') {
+                    console.log('🏠 Calling local model service');
+                    responseGenerator = await LocalModelService.generateResponse(
+                        message.prompt,
+                        modelId,
+                        {
+                            hasImage: message.hasImage
+                        }
+                    );
+                } else {
+                    console.log('🌐 Calling external model service');
+                    responseGenerator = await ExternalModelService.generateResponse(
+                        provider,
+                        modelId,
+                        message.prompt,
+                        {
+                            hasImage: message.hasImage
+                        }
+                    );
+                }
 
-            if (!responseGenerator) {
-                throw new Error('No response generator returned from model service');
+                if (!responseGenerator) {
+                    throw new Error('No response generator returned from model service');
+                }
+                console.log('✅ Response generator created successfully');
+            } catch (error) {
+                console.error('❌ Error generating response:', error);
+                throw error;
             }
 
             // Handle streaming responses
             if (typeof responseGenerator[Symbol.asyncIterator] === 'function') {
+                console.log('🔄 Starting streaming response handling');
                 let messageStarted = false;
                 let chunkCount = 0;
                 let accumulatedContent = '';
                 let previousContent = '';
                 
-                for await (const chunk of responseGenerator) {
-                    if (!chunk) continue;  // Skip empty chunks
-                    
-                    chunkCount++;
-                    const newContent = chunk.response || chunk.content || '';
-                    if (!newContent) continue;  // Skip empty content
-                    
-                    const deltaContent = newContent.slice(previousContent.length);
-                    if (!deltaContent) continue;  // Skip if no new content
-                    
-                    previousContent = newContent;
-                    accumulatedContent = newContent;
-
-                    if (!messageStarted) {
-                        messageStarted = true;
-                        console.log('Started receiving content');
-                    }
-                    
-                    console.log('Streaming delta:', {
-                        chunkCount,
-                        deltaContent,
-                        totalLength: accumulatedContent.length,
-                        isDone: chunk.done || false
-                    });
-                    
-                    const response = {
-                        type: 'MODEL_RESPONSE',
-                        success: true,
-                        delta: { content: deltaContent },
-                        response: accumulatedContent,
-                        done: chunk.done || false
-                    };
-
-                    try {
-                        if (port) {
-                            port.postMessage(response);
-                        } else {
-                            chrome.runtime.sendMessage(response);
+                try {
+                    console.log('⏳ Entering stream processing loop');
+                    for await (const chunk of responseGenerator) {
+                        if (!chunk) {
+                            console.log('⏭️ Skipping empty chunk');
+                            continue;
                         }
-                    } catch (error) {
-                        console.warn('Error sending delta:', error);
-                        // Don't break the stream on send error
-                    }
-                    
-                    if (chunk.done) {
-                        console.log('Stream complete:', {
-                            totalChunks: chunkCount,
-                            finalLength: accumulatedContent.length
+                        
+                        chunkCount++;
+                        const newContent = chunk.response || chunk.content || '';
+                        if (!newContent) {
+                            console.log('⏭️ Skipping chunk with no content');
+                            continue;
+                        }
+                        
+                        const deltaContent = newContent.slice(previousContent.length);
+                        if (!deltaContent) {
+                            console.log('⏭️ Skipping chunk with no new content');
+                            continue;
+                        }
+                        
+                        previousContent = newContent;
+                        accumulatedContent = newContent;
+
+                        if (!messageStarted) {
+                            messageStarted = true;
+                            console.log('📝 Started receiving content');
+                        }
+                        
+                        console.log('📦 Processing chunk:', {
+                            chunkNumber: chunkCount,
+                            deltaLength: deltaContent.length,
+                            totalLength: accumulatedContent.length,
+                            isDone: chunk.done || false
                         });
-                        break;
+                        
+                        const response = {
+                            type: 'MODEL_RESPONSE',
+                            success: true,
+                            delta: { content: deltaContent },
+                            response: accumulatedContent,
+                            done: chunk.done || false
+                        };
+
+                        try {
+                            console.log('📤 Sending chunk to UI');
+                            if (port) {
+                                port.postMessage(response);
+                            } else {
+                                chrome.runtime.sendMessage(response);
+                            }
+                            console.log('✅ Chunk sent successfully');
+                        } catch (error) {
+                            console.error('❌ Error sending chunk:', error);
+                            throw error;
+                        }
+                        
+                        if (chunk.done) {
+                            console.log('🏁 Stream complete:', {
+                                totalChunks: chunkCount,
+                                finalLength: accumulatedContent.length
+                            });
+                            break;
+                        }
                     }
+                } catch (error) {
+                    console.error('❌ Error in stream processing:', error);
+                    throw error;
                 }
 
                 // Only send final message if we actually got content
                 if (accumulatedContent) {
+                    console.log('📤 Sending final message');
                     const finalResponse = {
                         type: 'MODEL_RESPONSE',
                         success: true,
@@ -128,12 +159,15 @@ export class MessageRouter {
                         } else {
                             chrome.runtime.sendMessage(finalResponse);
                         }
+                        console.log('✅ Final message sent successfully');
                     } catch (error) {
-                        console.error('Failed to send final message:', error);
+                        console.error('❌ Failed to send final message:', error);
+                        throw error;
                     }
                 }
             } else {
                 // Handle non-streaming response
+                console.log('📝 Handling non-streaming response');
                 const content = responseGenerator.response || responseGenerator.content;
                 if (!content) {
                     throw new Error('Empty response received from model');
@@ -147,20 +181,22 @@ export class MessageRouter {
                 };
                 
                 try {
+                    console.log('📤 Sending non-streaming response');
                     if (port) {
                         port.postMessage(response);
                     } else {
                         chrome.runtime.sendMessage(response);
                     }
+                    console.log('✅ Non-streaming response sent successfully');
                 } catch (error) {
-                    console.error('Failed to send response:', error);
+                    console.error('❌ Failed to send response:', error);
                     throw error;
                 }
             }
             
             return true;
         } catch (error) {
-            console.error('Error in routeModelRequest:', error);
+            console.error('❌ Error in routeModelRequest:', error);
             const errorResponse = {
                 type: 'MODEL_RESPONSE',
                 success: false,
@@ -168,13 +204,14 @@ export class MessageRouter {
             };
             
             try {
+                console.log('📤 Sending error response to UI');
                 if (port) {
                     port.postMessage(errorResponse);
                 } else {
                     chrome.runtime.sendMessage(errorResponse);
                 }
             } catch (sendError) {
-                console.error('Failed to send error response:', sendError);
+                console.error('❌ Failed to send error response:', sendError);
             }
             
             return false;
