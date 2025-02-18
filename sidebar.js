@@ -605,15 +605,23 @@ try {
             const customSelect = document.getElementById('model-selector');
             const selectSelected = customSelect.querySelector('.select-selected');
             const selectItems = customSelect.querySelector('.select-items');
-            const selectedText = selectSelected.querySelector('.selected-text');
-            const selectedLogo = selectSelected.querySelector('.provider-logo');
+            
+            // Remove existing event listeners
+            const newSelectSelected = selectSelected.cloneNode(true);
+            const newSelectItems = selectItems.cloneNode(false);
+            selectSelected.parentNode.replaceChild(newSelectSelected, selectSelected);
+            selectItems.parentNode.replaceChild(newSelectItems, selectItems);
+            
+            // Get new references after DOM updates
+            const selectedText = newSelectSelected.querySelector('.selected-text');
+            const selectedLogo = newSelectSelected.querySelector('.provider-logo');
             
             // Set initial loading state
             selectedText.textContent = 'Loading models...';
             selectedLogo.style.display = 'none';
             
             // Clear existing options
-            selectItems.innerHTML = '';
+            newSelectItems.innerHTML = '';
             
             let hasAnyModels = false;  // Track if we find any models
             let hasSelectedModel = false;  // Track if we've found the current model
@@ -673,7 +681,7 @@ try {
                     console.log(`Enabled models for ${provider}:`, enabledModels);
                     
                     if (enabledModels.length > 0) {
-                        const availableModels = await getProviderModels(provider, sections, customSelect, selectedText, selectedLogo);
+                        const availableModels = await getProviderModels(provider);
                         console.log(`Available models for ${provider}:`, availableModels);
                         
                         if (!availableModels || availableModels.length === 0) {
@@ -721,7 +729,7 @@ try {
             }
             
             // Add sections to dropdown
-            sections.forEach(section => selectItems.appendChild(section));
+            sections.forEach(section => newSelectItems.appendChild(section));
             
             // Update UI based on whether we found any models
             if (!hasAnyModels) {
@@ -746,10 +754,10 @@ try {
                         </div>
                     </div>
                 `;
-                selectItems.appendChild(helperSection);
+                newSelectItems.appendChild(helperSection);
             } else if (!hasSelectedModel) {
                 // If we have models but none is selected, select the first one
-                const firstOption = selectItems.querySelector('.model-option');
+                const firstOption = newSelectItems.querySelector('.model-option');
                 if (firstOption && firstOption.dataset.value) {
                     const value = firstOption.dataset.value;
                     const [provider] = value.split(':');
@@ -761,19 +769,23 @@ try {
                 }
             }
             
-            // Toggle dropdown
-            selectSelected.addEventListener('click', (e) => {
+            // Toggle dropdown with new elements
+            newSelectSelected.addEventListener('click', (e) => {
                 e.stopPropagation();
                 customSelect.classList.toggle('open');
             });
             
             // Close dropdown when clicking outside
-            document.addEventListener('click', () => {
-                customSelect.classList.remove('open');
-            });
+            const closeDropdown = (e) => {
+                if (!customSelect.contains(e.target)) {
+                    customSelect.classList.remove('open');
+                }
+            };
+            document.removeEventListener('click', closeDropdown);
+            document.addEventListener('click', closeDropdown);
             
-            // Handle model selection
-            selectItems.addEventListener('click', async (e) => {
+            // Handle model selection with new elements
+            newSelectItems.addEventListener('click', async (e) => {
                 const option = e.target.closest('.model-option');
                 if (option && option.dataset.value) {  // Only handle clicks on valid model options
                     const value = option.dataset.value;
@@ -786,7 +798,7 @@ try {
                     selectedLogo.style.display = 'block';
                     
                     // Update selected state
-                    selectItems.querySelectorAll('.model-option').forEach(opt => {
+                    newSelectItems.querySelectorAll('.model-option').forEach(opt => {
                         opt.classList.toggle('selected', opt === option);
                     });
                     
@@ -799,6 +811,8 @@ try {
             
         } catch (error) {
             console.error('Error initializing model selector:', error);
+            const selectedText = newSelectSelected.querySelector('.selected-text');
+            const selectedLogo = newSelectSelected.querySelector('.provider-logo');
             selectedText.textContent = 'No models configured';
             selectedLogo.style.display = 'none';
         }
