@@ -608,8 +608,15 @@ try {
             const selectedText = selectSelected.querySelector('.selected-text');
             const selectedLogo = selectSelected.querySelector('.provider-logo');
             
+            // Set initial loading state
+            selectedText.textContent = 'Loading models...';
+            selectedLogo.style.display = 'none';
+            
             // Clear existing options
             selectItems.innerHTML = '';
+            
+            let hasAnyModels = false;  // Track if we find any models
+            let hasSelectedModel = false;  // Track if we've found the current model
             
             // Get local models from Ollama
             try {
@@ -619,6 +626,7 @@ try {
                     console.log('Local models found:', data.models);
                     
                     if (data.models.length > 0) {
+                        hasAnyModels = true;
                         const localSection = document.createElement('div');
                         localSection.className = 'provider-section';
                         localSection.innerHTML = `
@@ -640,6 +648,8 @@ try {
                                 option.classList.add('selected');
                                 selectedText.textContent = model.name;
                                 selectedLogo.src = chrome.runtime.getURL('assets/ollama.jpg');
+                                selectedLogo.style.display = 'block';
+                                hasSelectedModel = true;
                             }
                             localSection.appendChild(option);
                         });
@@ -648,7 +658,8 @@ try {
                     }
                 }
             } catch (error) {
-                console.warn('Could not fetch local models:', error);
+                // Don't show any error for local models, just log it
+                console.log('Local models not available:', error);
             }
             
             // Add API models based on saved keys
@@ -674,6 +685,7 @@ try {
                         console.log(`Filtered models for ${provider}:`, filteredModels);
                         
                         if (filteredModels.length > 0) {
+                            hasAnyModels = true;
                             const providerSection = document.createElement('div');
                             providerSection.className = 'provider-section';
                             const logoFile = logoMap[provider];
@@ -696,6 +708,8 @@ try {
                                     option.classList.add('selected');
                                     selectedText.textContent = model.name;
                                     selectedLogo.src = chrome.runtime.getURL(`assets/${logoFile}`);
+                                    selectedLogo.style.display = 'block';
+                                    hasSelectedModel = true;
                                 }
                                 providerSection.appendChild(option);
                             });
@@ -709,8 +723,8 @@ try {
             // Add sections to dropdown
             sections.forEach(section => selectItems.appendChild(section));
             
-            // If no models are available, show a friendly message
-            if (sections.length === 0) {
+            // Update UI based on whether we found any models
+            if (!hasAnyModels) {
                 console.log('No models available in selector');
                 selectedText.textContent = 'No models configured';
                 selectedLogo.style.display = 'none';
@@ -724,8 +738,8 @@ try {
                     </div>
                     <div class="model-list">
                         <div class="model-option helper-message">
-                            <p>You can add models by:</p>
-                            <ul>
+                            <ul class="helper-list">
+                                <li class="helper-header">You can add models by:</li>
                                 <li>Clicking "Launch Local" to set up Ollama</li>
                                 <li>Adding API keys for other providers</li>
                             </ul>
@@ -733,6 +747,18 @@ try {
                     </div>
                 `;
                 selectItems.appendChild(helperSection);
+            } else if (!hasSelectedModel) {
+                // If we have models but none is selected, select the first one
+                const firstOption = selectItems.querySelector('.model-option');
+                if (firstOption && firstOption.dataset.value) {
+                    const value = firstOption.dataset.value;
+                    const [provider] = value.split(':');
+                    currentModel = value;
+                    selectedText.textContent = firstOption.querySelector('span').textContent;
+                    selectedLogo.src = chrome.runtime.getURL(`assets/${logoMap[provider]}`);
+                    selectedLogo.style.display = 'block';
+                    firstOption.classList.add('selected');
+                }
             }
             
             // Toggle dropdown
@@ -773,7 +799,6 @@ try {
             
         } catch (error) {
             console.error('Error initializing model selector:', error);
-            const selectedText = document.querySelector('.selected-text');
             selectedText.textContent = 'No models configured';
             selectedLogo.style.display = 'none';
         }
@@ -2080,19 +2105,30 @@ Let's break this down:`;
             border-color: transparent;
         }
         
-        .helper-message p {
-            margin: 0 0 8px 0;
-            color: #666;
-        }
-        
-        .helper-message ul {
+        .helper-list {
             margin: 0;
-            padding-left: 20px;
+            padding: 0;
+            list-style: none;
             color: #666;
         }
         
-        .helper-message li {
-            margin: 4px 0;
+        .helper-header {
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .helper-list li:not(.helper-header) {
+            margin: 8px 0;
+            padding-left: 24px;
+            position: relative;
+        }
+        
+        .helper-list li:not(.helper-header):before {
+            content: "•";
+            position: absolute;
+            left: 8px;
+            color: #666;
         }
     `;
     document.head.appendChild(helperStyles);
