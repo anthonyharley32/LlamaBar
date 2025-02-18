@@ -828,6 +828,15 @@ try {
             }
         }
 
+        // For OpenRouter, return an empty array since models are managed differently
+        if (provider === 'openrouter') {
+            const enabledModels = await ApiKeyManager.getEnabledModels('openrouter');
+            return enabledModels.map(modelId => ({
+                id: modelId,
+                name: modelId.split('/').pop() // Extract model name from ID
+            }));
+        }
+
         // Fallback static lists for other providers
         const models = {
             anthropic: [
@@ -842,7 +851,6 @@ try {
                 { id: 'claude-2.1', name: 'Claude 2.1' },
                 { id: 'claude-2.0', name: 'Claude 2.0' }
             ],
-            openrouter: [], // Empty array since we'll use text input
             perplexity: [
                 { id: 'sonar-reasoning-pro', name: 'Sonar Reasoning Pro' },
                 { id: 'sonar-reasoning', name: 'Sonar Reasoning' },
@@ -867,49 +875,6 @@ try {
                 { id: 'grok-2-vision-1212', name: 'Grok 2 Vision' }
             ]
         };
-        
-        if (provider === 'openrouter') {
-            const providerSection = document.createElement('div');
-            providerSection.className = 'provider-section';
-            const logoFile = logoMap[provider];
-            providerSection.innerHTML = `
-                <div class="provider-header">
-                    <img class="provider-logo" src="${chrome.runtime.getURL(`assets/${logoFile}`)}" alt="${provider}">
-                    <span>OpenRouter Models</span>
-                </div>
-                <div class="openrouter-model-input">
-                    <input type="text" 
-                           placeholder="Enter model ID (e.g., openai/gpt-4-turbo-preview)"
-                           class="openrouter-model-id">
-                    <button class="use-model">Use Model</button>
-                </div>
-            `;
-
-            // Add event listener for the Use Model button
-            const useModelButton = providerSection.querySelector('.use-model');
-            const modelInput = providerSection.querySelector('.openrouter-model-id');
-            
-            useModelButton.addEventListener('click', () => {
-                const modelId = modelInput.value.trim();
-                if (modelId) {
-                    currentModel = `openrouter:${modelId}`;
-                    selectedText.textContent = modelId;
-                    selectedLogo.src = chrome.runtime.getURL(`assets/${logoFile}`);
-                    customSelect.classList.remove('open');
-                    console.log('OpenRouter model changed to:', currentModel);
-                }
-            });
-
-            // Add event listener for Enter key
-            modelInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    useModelButton.click();
-                }
-            });
-
-            sections.push(providerSection);
-            return []; // Skip the rest of the provider handling
-        }
         
         return models[provider] || [];
     }
@@ -1414,7 +1379,7 @@ Let's break this down:`;
 
     // Show model editor
     async function showModelEditor() {
-        const providers = ['openai', 'anthropic', 'perplexity', 'gemini', 'grok'];
+        const providers = ['openai', 'anthropic', 'perplexity', 'gemini', 'grok', 'openrouter'];
         const modelEditor = document.createElement('div');
         modelEditor.className = 'model-editor';
         
@@ -1423,9 +1388,9 @@ Let's break this down:`;
             const hasKey = await ApiKeyManager.hasApiKey(provider);
             if (!hasKey) return null;
             
-            const enabledModels = await ApiKeyManager.getEnabledModels(provider);
+            const enabledModels = await ApiKeyManager.getEnabledModels(provider) || [];
             const availableModels = await getProviderModels(provider, null, null, null, null);
-            return { provider, enabledModels, availableModels };
+            return { provider, enabledModels: enabledModels || [], availableModels: availableModels || [] };
         }));
         
         const activeProviders = providerModels.filter(Boolean);
@@ -1442,32 +1407,78 @@ Let's break this down:`;
                     </button>
                 </div>
                 <div class="model-editor-body">
-                    ${activeProviders.map(({ provider, enabledModels, availableModels }) => `
-                        <div class="provider-models">
-                            <div class="provider-header">
-                                <img class="provider-logo" src="${chrome.runtime.getURL(`assets/${logoMap[provider]}`)}" alt="${provider}">
-                                <h3>${provider.charAt(0).toUpperCase() + provider.slice(1)}</h3>
-                                <span class="model-count">${enabledModels.length} of ${availableModels.length} enabled</span>
-                            </div>
-                            <div class="model-list">
-                                ${availableModels.map(model => `
-                                    <label class="model-option">
-                                        <div class="checkbox-wrapper">
-                                            <input type="checkbox" 
-                                                   data-provider="${provider}"
-                                                   data-model="${model.id}"
-                                                   ${enabledModels.includes(model.id) ? 'checked' : ''}>
-                                            <span class="checkbox-custom"></span>
+                    ${activeProviders.map(({ provider, enabledModels, availableModels }) => {
+                        if (provider === 'openrouter') {
+                            return `
+                                <div class="provider-models">
+                                    <div class="provider-header">
+                                        <img class="provider-logo" src="${chrome.runtime.getURL(`assets/${logoMap[provider]}`)}" alt="${provider}">
+                                        <h3>OpenRouter</h3>
+                                        <span class="model-count">${enabledModels.length} models enabled</span>
+                                    </div>
+                                    <div class="openrouter-models">
+                                        ${enabledModels && enabledModels.length > 0 ? `
+                                            <div class="model-list">
+                                                ${enabledModels.map(modelId => `
+                                                    <div class="model-option">
+                                                        <div class="model-info">
+                                                            <span class="model-name">${modelId}</span>
+                                                        </div>
+                                                        <button class="remove-model-button" data-model="${modelId}" aria-label="Remove model">
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                                <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : ''}
+                                        <div class="add-model-section">
+                                            <div class="add-model-input-group">
+                                                <input type="text" 
+                                                       class="add-model-input" 
+                                                       placeholder="Enter model ID (e.g., anthropic/claude-3-opus-20240229)"
+                                                       data-provider="openrouter">
+                                                <button class="add-model-button" disabled>
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M12 5v14M5 12h14" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    </svg>
+                                                    Add Model
+                                                </button>
+                                            </div>
+                                            <div class="model-validation-message"></div>
                                         </div>
-                                        <div class="model-info">
-                                            <span class="model-name">${model.name}</span>
-                                            <span class="model-id">${model.id}</span>
-                                        </div>
-                                    </label>
-                                `).join('')}
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        return `
+                            <div class="provider-models">
+                                <div class="provider-header">
+                                    <img class="provider-logo" src="${chrome.runtime.getURL(`assets/${logoMap[provider]}`)}" alt="${provider}">
+                                    <h3>${provider.charAt(0).toUpperCase() + provider.slice(1)}</h3>
+                                    <span class="model-count">${enabledModels.length} of ${availableModels.length} enabled</span>
+                                </div>
+                                <div class="model-list">
+                                    ${availableModels.map(model => `
+                                        <label class="model-option">
+                                            <div class="checkbox-wrapper">
+                                                <input type="checkbox" 
+                                                       data-provider="${provider}"
+                                                       data-model="${model.id}"
+                                                       ${enabledModels.includes(model.id) ? 'checked' : ''}>
+                                                <span class="checkbox-custom"></span>
+                                            </div>
+                                            <div class="model-info">
+                                                <span class="model-name">${model.name}</span>
+                                                <span class="model-id">${model.id}</span>
+                                            </div>
+                                        </label>
+                                    `).join('')}
+                                </div>
                             </div>
-                        </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
                 <div class="model-editor-footer">
                     <button class="secondary-button close-editor">Cancel</button>
@@ -1500,6 +1511,92 @@ Let's break this down:`;
         // Add event listeners
         const saveAllButton = modelEditor.querySelector('.save-all-models');
         const closeButtons = modelEditor.querySelectorAll('.close-editor');
+        
+        // Handle OpenRouter model input
+        const openRouterSection = modelEditor.querySelector('.openrouter-models');
+        if (openRouterSection) {
+            const addModelInput = openRouterSection.querySelector('.add-model-input');
+            const addModelButton = openRouterSection.querySelector('.add-model-button');
+            const validationMessage = openRouterSection.querySelector('.model-validation-message');
+            
+            // Add input validation
+            addModelInput.addEventListener('input', async () => {
+                const modelId = addModelInput.value.trim();
+                addModelButton.disabled = !modelId;
+                
+                if (modelId) {
+                    try {
+                        validationMessage.textContent = 'Checking model availability...';
+                        validationMessage.className = 'model-validation-message loading';
+                        
+                        const response = await fetch('https://openrouter.ai/api/v1/models', {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${await ApiKeyManager.getApiKey('openrouter')}`,
+                                'Content-Type': 'application/json',
+                                'HTTP-Referer': chrome.runtime.getURL(''),
+                                'X-Title': 'LlamaBar'
+                            }
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error('Failed to fetch models');
+                        }
+                        
+                        const data = await response.json();
+                        const modelExists = data.data.some(model => model.id === modelId);
+                        
+                        if (modelExists) {
+                            validationMessage.textContent = 'Model is available ✓';
+                            validationMessage.className = 'model-validation-message success';
+                            addModelButton.disabled = false;
+                        } else {
+                            validationMessage.textContent = 'Model not found on OpenRouter';
+                            validationMessage.className = 'model-validation-message error';
+                            addModelButton.disabled = true;
+                        }
+                    } catch (error) {
+                        console.error('Error validating model:', error);
+                        validationMessage.textContent = 'Error checking model availability';
+                        validationMessage.className = 'model-validation-message error';
+                        addModelButton.disabled = true;
+                    }
+                } else {
+                    validationMessage.textContent = '';
+                    validationMessage.className = 'model-validation-message';
+                }
+            });
+            
+            // Add model button handler
+            addModelButton.addEventListener('click', async () => {
+                const modelId = addModelInput.value.trim();
+                if (!modelId) return;
+                
+                const enabledModels = await ApiKeyManager.getEnabledModels('openrouter') || [];
+                if (!enabledModels.includes(modelId)) {
+                    enabledModels.push(modelId);
+                    await ApiKeyManager.saveEnabledModels('openrouter', enabledModels);
+                    
+                    // Refresh the model editor
+                    modelEditor.remove();
+                    showModelEditor();
+                }
+            });
+            
+            // Remove model button handler
+            openRouterSection.querySelectorAll('.remove-model-button').forEach(button => {
+                button.addEventListener('click', async () => {
+                    const modelId = button.dataset.model;
+                    const enabledModels = await ApiKeyManager.getEnabledModels('openrouter') || [];
+                    const updatedModels = enabledModels.filter(id => id !== modelId);
+                    await ApiKeyManager.saveEnabledModels('openrouter', updatedModels);
+                    
+                    // Refresh the model editor
+                    modelEditor.remove();
+                    showModelEditor();
+                });
+            });
+        }
         
         saveAllButton.addEventListener('click', async () => {
             // Show loading state
@@ -1688,22 +1785,21 @@ Let's break this down:`;
         }
 
         .model-option {
+            position: relative;
             display: flex;
-            align-items: flex-start;
+            align-items: center;
+            justify-content: flex-start;
             padding: 12px;
             border-radius: 8px;
             background: #f8f9fa;
-            cursor: pointer;
             transition: background 0.2s ease;
-        }
-
-        .model-option:hover {
-            background: #f0f1f2;
+            gap: 12px;
+            cursor: pointer;
         }
 
         .checkbox-wrapper {
             position: relative;
-            margin-right: 12px;
+            flex-shrink: 0;
             margin-top: 2px;
         }
 
@@ -1750,18 +1846,48 @@ Let's break this down:`;
         .model-info {
             display: flex;
             flex-direction: column;
+            flex: 1;
+            min-width: 0;
         }
 
         .model-name {
             font-size: 14px;
             font-weight: 500;
             color: #1a1a1a;
+            text-align: left;
         }
 
         .model-id {
             font-size: 12px;
             color: #666;
             margin-top: 2px;
+            text-align: left;
+        }
+
+        .remove-model-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            transition: color 0.2s ease;
+            opacity: 0;
+            margin-left: auto;
+        }
+
+        .model-option:hover {
+            background: #f0f1f2;
+        }
+
+        .model-option:hover .remove-model-button {
+            opacity: 1;
+        }
+
+        .remove-model-button:hover {
+            color: #FF3B30;
         }
 
         .model-editor-footer {
@@ -1837,6 +1963,79 @@ Let's break this down:`;
 
         .loading-spinner {
             animation: spin 1s linear infinite;
+        }
+
+        .openrouter-models {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .add-model-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .add-model-input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .add-model-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+        }
+
+        .add-model-input:focus {
+            outline: none;
+            border-color: #007AFF;
+        }
+
+        .add-model-button {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .add-model-button:disabled {
+            background: #99C4FF;
+            cursor: not-allowed;
+        }
+
+        .add-model-button:not(:disabled):hover {
+            background: #0066CC;
+        }
+
+        .model-validation-message {
+            font-size: 13px;
+            color: #666;
+            min-height: 20px;
+        }
+
+        .model-validation-message.loading {
+            color: #666;
+        }
+
+        .model-validation-message.success {
+            color: #34C759;
+        }
+
+        .model-validation-message.error {
+            color: #FF3B30;
         }
     `;
     document.head.appendChild(modelStyles);

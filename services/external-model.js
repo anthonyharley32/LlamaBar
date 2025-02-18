@@ -485,76 +485,9 @@ export class ExternalModelService {
             throw new Error(error.error?.message || `OpenRouter API error: ${response.status}`);
         }
 
-        return this.handleOpenRouterStream(response);
-    }
-
-    static async *handleOpenRouterStream(response) {
-        console.log('🔄 Initializing OpenRouter stream handler');
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let accumulatedContent = '';
-
-        try {
-            while (true) {
-                const { value, done } = await reader.read();
-                
-                if (done) {
-                    console.log('🏁 OpenRouter stream complete');
-                    if (accumulatedContent) {
-                        yield {
-                            type: 'MODEL_RESPONSE',
-                            success: true,
-                            delta: { content: '' },
-                            response: accumulatedContent,
-                            done: true
-                        };
-                    }
-                    break;
-                }
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                    if (!line.trim()) continue;
-                    if (line === 'data: [DONE]') {
-                        console.log('🏁 Received DONE marker');
-                        yield {
-                            type: 'MODEL_RESPONSE',
-                            success: true,
-                            delta: { content: '' },
-                            response: accumulatedContent,
-                            done: true
-                        };
-                        continue;
-                    }
-
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const jsonData = JSON.parse(line.slice(6));
-                            const content = jsonData.choices?.[0]?.delta?.content || '';
-                            if (content) {
-                                accumulatedContent += content;
-                                yield {
-                                    type: 'MODEL_RESPONSE',
-                                    success: true,
-                                    delta: { content },
-                                    response: accumulatedContent,
-                                    done: false
-                                };
-                            }
-                        } catch (e) {
-                            console.warn('⚠️ Error parsing OpenRouter JSON:', e);
-                            continue;
-                        }
-                    }
-                }
-            }
-        } finally {
-            reader.releaseLock();
-        }
+        return ExternalModelService.handleProviderStream(response, 'openrouter', (json) => {
+            return json.choices?.[0]?.delta?.content || '';
+        });
     }
 
     static async handleGrok(modelId, prompt, options = {}) {
