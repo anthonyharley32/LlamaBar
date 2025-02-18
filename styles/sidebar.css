@@ -858,4 +858,41 @@ button:disabled {
     color: #4caf50;
     margin-left: 8px;
     font-weight: bold;
+}
+
+.openrouter-model-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--background-color);
+}
+
+.openrouter-model-input input {
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 13px;
+    background: var(--background-color);
+    color: var(--text-color);
+}
+
+.openrouter-model-input input:focus {
+    border-color: var(--primary-color);
+    outline: none;
+}
+
+.openrouter-model-input button {
+    padding: 6px 12px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.openrouter-model-input button:hover {
+    opacity: 0.9;
 } 

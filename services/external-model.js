@@ -462,6 +462,9 @@ export class ExternalModelService {
             throw new Error('OpenRouter API key not found');
         }
 
+        // Remove any openrouter: prefix if present
+        const cleanModelId = modelId.replace('openrouter:', '');
+
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -471,7 +474,7 @@ export class ExternalModelService {
                 'X-Title': 'LlamaBar'
             },
             body: JSON.stringify({
-                model: modelId,
+                model: cleanModelId,
                 messages: [{ role: 'user', content: prompt }],
                 stream: true
             })

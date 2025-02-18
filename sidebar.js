@@ -308,21 +308,10 @@ try {
             // Save the key if validation passed
             await ApiKeyManager.saveApiKey(provider, apiKey);
             
-            // Get available models
-            const models = await getProviderModels(provider);
-            if (!models || models.length === 0) {
-                throw new Error('No models available for this API key');
-            }
-            
-            // Update checkmark
-            await updateProviderStatus(provider);
-            showToast(`${provider} API key saved successfully!`);
-            
-            // For Gemini, the models are already saved during validation
-            if (provider !== 'gemini') {
-                // Save all models as enabled by default
-                await ApiKeyManager.saveEnabledModels(provider, models.map(m => m.id));
-            } else {
+            // Handle model saving
+            if (provider === 'openrouter') {
+                await ApiKeyManager.saveEnabledModels(provider, []);
+            } else if (provider === 'gemini') {
                 // Save all Gemini models as enabled
                 await ApiKeyManager.saveEnabledModels('gemini', [
                     // Gemini 2.0 Models
@@ -337,9 +326,18 @@ try {
                     'gemini-1.5-flash-exp-0827',
                     'gemini-1.5-flash-8b-exp-0924'
                 ]);
+            } else {
+                // Get available models
+                const models = await getProviderModels(provider, null, null, null, null);
+                if (!models || models.length === 0) {
+                    throw new Error('No models available for this API key');
+                }
+                // Save all models as enabled by default
+                await ApiKeyManager.saveEnabledModels(provider, models.map(m => m.id));
             }
             
-            // Update the model selector
+            // Update checkmark and UI
+            await updateProviderStatus(provider);
             await initializeModelSelector();
             
             // Reset button state and close the dropdown
@@ -347,6 +345,7 @@ try {
             saveButton.disabled = false;
             apiKeyInput.classList.remove('show');
             
+            showToast(`${provider} API key saved successfully!`);
         } catch (error) {
             console.error(`Error saving API key for ${provider}:`, error);
             showToast(`Error: ${error.message}`, 'error');
@@ -535,6 +534,38 @@ try {
                     throw error;
                 }
 
+            case 'openrouter':
+                try {
+                    // Test the API key with a minimal request
+                    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${apiKey}`,
+                            'Content-Type': 'application/json',
+                            'HTTP-Referer': chrome.runtime.getURL(''),
+                            'X-Title': 'LlamaBar'
+                        },
+                        body: JSON.stringify({
+                            model: 'openai/gpt-4o',
+                            messages: [{ role: 'user', content: 'test' }],
+                            max_tokens: 1
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        if (response.status === 401) {
+                            throw new Error('Invalid API key');
+                        }
+                        throw new Error(errorData.error?.message || `API error: ${response.status}`);
+                    }
+
+                    return true;
+                } catch (error) {
+                    console.error('Error validating OpenRouter key:', error);
+                    throw error;
+                }
+
             // Add other providers here
             default:
                 throw new Error('Provider not supported');
@@ -583,6 +614,7 @@ try {
     async function initializeModelSelector() {
         try {
             console.log('Initializing model selector...');
+            const sections = [];  // Initialize sections array
             const customSelect = document.getElementById('model-selector');
             const selectSelected = customSelect.querySelector('.select-selected');
             const selectItems = customSelect.querySelector('.select-items');
@@ -591,7 +623,6 @@ try {
             
             // Clear existing options
             selectItems.innerHTML = '';
-            let sections = [];
             
             // Get local models from Ollama
             try {
@@ -644,7 +675,7 @@ try {
                     console.log(`Enabled models for ${provider}:`, enabledModels);
                     
                     if (enabledModels.length > 0) {
-                        const availableModels = await getProviderModels(provider);
+                        const availableModels = await getProviderModels(provider, sections, customSelect, selectedText, selectedLogo);
                         console.log(`Available models for ${provider}:`, availableModels);
                         
                         if (!availableModels || availableModels.length === 0) {
@@ -743,7 +774,7 @@ try {
     }
 
     // Get available models for each provider
-    async function getProviderModels(provider) {
+    async function getProviderModels(provider, sections, customSelect, selectedText, selectedLogo) {
         if (provider === 'openai') {
             try {
                 const apiKey = await ApiKeyManager.getApiKey('openai');
@@ -811,11 +842,7 @@ try {
                 { id: 'claude-2.1', name: 'Claude 2.1' },
                 { id: 'claude-2.0', name: 'Claude 2.0' }
             ],
-            openrouter: [
-                { id: 'openai/gpt-4-turbo-preview', name: 'GPT-4 Turbo (OpenRouter)' },
-                { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus (OpenRouter)' },
-                { id: 'google/gemini-pro', name: 'Gemini Pro (OpenRouter)' }
-            ],
+            openrouter: [], // Empty array since we'll use text input
             perplexity: [
                 { id: 'sonar-reasoning-pro', name: 'Sonar Reasoning Pro' },
                 { id: 'sonar-reasoning', name: 'Sonar Reasoning' },
@@ -840,6 +867,49 @@ try {
                 { id: 'grok-2-vision-1212', name: 'Grok 2 Vision' }
             ]
         };
+        
+        if (provider === 'openrouter') {
+            const providerSection = document.createElement('div');
+            providerSection.className = 'provider-section';
+            const logoFile = logoMap[provider];
+            providerSection.innerHTML = `
+                <div class="provider-header">
+                    <img class="provider-logo" src="${chrome.runtime.getURL(`assets/${logoFile}`)}" alt="${provider}">
+                    <span>OpenRouter Models</span>
+                </div>
+                <div class="openrouter-model-input">
+                    <input type="text" 
+                           placeholder="Enter model ID (e.g., openai/gpt-4-turbo-preview)"
+                           class="openrouter-model-id">
+                    <button class="use-model">Use Model</button>
+                </div>
+            `;
+
+            // Add event listener for the Use Model button
+            const useModelButton = providerSection.querySelector('.use-model');
+            const modelInput = providerSection.querySelector('.openrouter-model-id');
+            
+            useModelButton.addEventListener('click', () => {
+                const modelId = modelInput.value.trim();
+                if (modelId) {
+                    currentModel = `openrouter:${modelId}`;
+                    selectedText.textContent = modelId;
+                    selectedLogo.src = chrome.runtime.getURL(`assets/${logoFile}`);
+                    customSelect.classList.remove('open');
+                    console.log('OpenRouter model changed to:', currentModel);
+                }
+            });
+
+            // Add event listener for Enter key
+            modelInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    useModelButton.click();
+                }
+            });
+
+            sections.push(providerSection);
+            return []; // Skip the rest of the provider handling
+        }
         
         return models[provider] || [];
     }
@@ -1344,7 +1414,7 @@ Let's break this down:`;
 
     // Show model editor
     async function showModelEditor() {
-        const providers = ['openai', 'anthropic', 'openrouter', 'perplexity', 'gemini', 'grok'];
+        const providers = ['openai', 'anthropic', 'perplexity', 'gemini', 'grok'];
         const modelEditor = document.createElement('div');
         modelEditor.className = 'model-editor';
         
@@ -1354,135 +1424,419 @@ Let's break this down:`;
             if (!hasKey) return null;
             
             const enabledModels = await ApiKeyManager.getEnabledModels(provider);
-            const availableModels = await getProviderModels(provider);
+            const availableModels = await getProviderModels(provider, null, null, null, null);
             return { provider, enabledModels, availableModels };
         }));
         
-        // Filter out providers without keys
         const activeProviders = providerModels.filter(Boolean);
         
         modelEditor.innerHTML = `
+            <div class="model-editor-backdrop"></div>
             <div class="model-editor-content">
-                <h2>Edit Enabled Models</h2>
-                ${activeProviders.map(({ provider, enabledModels, availableModels }) => `
-                    <div class="provider-models">
-                        <h3>${provider.charAt(0).toUpperCase() + provider.slice(1)}</h3>
-                        <div class="model-list">
-                            ${availableModels.map(model => `
-                                <label class="model-option">
-                                    <input type="checkbox" 
-                                           data-provider="${provider}"
-                                           data-model="${model.id}"
-                                           ${enabledModels.includes(model.id) ? 'checked' : ''}>
-                                    <span>${model.name}</span>
-                                </label>
-                            `).join('')}
+                <div class="model-editor-header">
+                    <h2>Model Settings</h2>
+                    <button class="close-editor" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="model-editor-body">
+                    ${activeProviders.map(({ provider, enabledModels, availableModels }) => `
+                        <div class="provider-models">
+                            <div class="provider-header">
+                                <img class="provider-logo" src="${chrome.runtime.getURL(`assets/${logoMap[provider]}`)}" alt="${provider}">
+                                <h3>${provider.charAt(0).toUpperCase() + provider.slice(1)}</h3>
+                                <span class="model-count">${enabledModels.length} of ${availableModels.length} enabled</span>
+                            </div>
+                            <div class="model-list">
+                                ${availableModels.map(model => `
+                                    <label class="model-option">
+                                        <div class="checkbox-wrapper">
+                                            <input type="checkbox" 
+                                                   data-provider="${provider}"
+                                                   data-model="${model.id}"
+                                                   ${enabledModels.includes(model.id) ? 'checked' : ''}>
+                                            <span class="checkbox-custom"></span>
+                                        </div>
+                                        <div class="model-info">
+                                            <span class="model-name">${model.name}</span>
+                                            <span class="model-id">${model.id}</span>
+                                        </div>
+                                    </label>
+                                `).join('')}
+                            </div>
                         </div>
-                    </div>
-                `).join('')}
-                <div class="model-editor-actions">
-                    <button class="save-all-models">Save Changes</button>
-                    <button class="close-editor">Cancel</button>
+                    `).join('')}
+                </div>
+                <div class="model-editor-footer">
+                    <button class="secondary-button close-editor">Cancel</button>
+                    <button class="primary-button save-all-models">
+                        <span class="button-content">
+                            <svg class="save-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M17 21v-8H7v8M7 3v5h8" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Save Changes</span>
+                        </span>
+                    </button>
                 </div>
             </div>
         `;
         
         document.body.appendChild(modelEditor);
         
+        // Add animation class after a small delay to trigger transition
+        requestAnimationFrame(() => {
+            modelEditor.classList.add('show');
+        });
+
+        // Handle backdrop click
+        const backdrop = modelEditor.querySelector('.model-editor-backdrop');
+        backdrop.addEventListener('click', () => {
+            closeModelEditor(modelEditor);
+        });
+        
         // Add event listeners
         const saveAllButton = modelEditor.querySelector('.save-all-models');
-        const closeButton = modelEditor.querySelector('.close-editor');
+        const closeButtons = modelEditor.querySelectorAll('.close-editor');
         
         saveAllButton.addEventListener('click', async () => {
-            for (const provider of providers) {
-                const checkboxes = modelEditor.querySelectorAll(`input[data-provider="${provider}"]`);
-                const selectedModels = Array.from(checkboxes)
-                    .filter(cb => cb.checked)
-                    .map(cb => cb.dataset.model);
-                
-                if (selectedModels.length > 0) {
-                    await ApiKeyManager.saveEnabledModels(provider, selectedModels);
+            // Show loading state
+            const buttonContent = saveAllButton.querySelector('.button-content');
+            const originalContent = buttonContent.innerHTML;
+            buttonContent.innerHTML = `
+                <svg class="loading-spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Saving...</span>
+            `;
+            saveAllButton.disabled = true;
+
+            try {
+                for (const provider of providers) {
+                    const checkboxes = modelEditor.querySelectorAll(`input[data-provider="${provider}"]`);
+                    const selectedModels = Array.from(checkboxes)
+                        .filter(cb => cb.checked)
+                        .map(cb => cb.dataset.model);
+                    
+                    if (selectedModels.length > 0) {
+                        await ApiKeyManager.saveEnabledModels(provider, selectedModels);
+                    }
                 }
+                
+                showToast('Models updated successfully!');
+                await initializeModelSelector();
+                closeModelEditor(modelEditor);
+            } catch (error) {
+                console.error('Error saving models:', error);
+                showToast('Error saving models', 'error');
+                // Restore button state
+                buttonContent.innerHTML = originalContent;
+                saveAllButton.disabled = false;
             }
-            
-            showToast('Models updated successfully!');
-            await initializeModelSelector();
-            modelEditor.remove();
         });
         
-        closeButton.addEventListener('click', () => {
-            modelEditor.remove();
+        closeButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                closeModelEditor(modelEditor);
+            });
         });
+
+        // Add checkbox change handler to update model count
+        modelEditor.querySelectorAll('.model-list').forEach(list => {
+            const provider = list.closest('.provider-models');
+            const countSpan = provider.querySelector('.model-count');
+            
+            list.addEventListener('change', () => {
+                const total = list.querySelectorAll('input[type="checkbox"]').length;
+                const checked = list.querySelectorAll('input[type="checkbox"]:checked').length;
+                countSpan.textContent = `${checked} of ${total} enabled`;
+            });
+        });
+    }
+
+    // Function to close model editor with animation
+    function closeModelEditor(modelEditor) {
+        modelEditor.classList.remove('show');
+        modelEditor.classList.add('hide');
+        
+        // Remove element after animation
+        setTimeout(() => {
+            modelEditor.remove();
+        }, 300); // Match this with CSS animation duration
     }
 
     // Add styles for new UI elements
     const modelStyles = document.createElement('style');
     modelStyles.textContent = `
-        .model-selection {
-            padding: 16px;
-        }
-        
-        .model-list {
-            margin: 12px 0;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        
-        .model-option {
-            display: flex;
-            align-items: center;
-            margin: 8px 0;
-            cursor: pointer;
-        }
-        
-        .model-option input[type="checkbox"] {
-            margin-right: 8px;
-        }
-        
-        .model-actions {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-            margin-top: 16px;
-        }
-        
         .model-editor {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.5);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
         }
-        
+
+        .model-editor.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .model-editor.hide {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .model-editor-backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
         .model-editor-content {
+            position: relative;
             background: white;
-            padding: 24px;
-            border-radius: 8px;
-            max-width: 500px;
+            border-radius: 12px;
+            max-width: 600px;
             width: 90%;
             max-height: 90vh;
-            overflow-y: auto;
-        }
-        
-        .provider-models {
-            margin: 16px 0;
-        }
-        
-        .model-editor-actions {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
             display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-            margin-top: 24px;
+            flex-direction: column;
+            transform: scale(0.95);
+            opacity: 0;
+            transition: transform 0.3s ease, opacity 0.3s ease;
         }
-        
-        button:disabled {
-            opacity: 0.6;
+
+        .model-editor.show .model-editor-content {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        .model-editor-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .model-editor-header h2 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .model-editor-body {
+            padding: 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .provider-models {
+            margin-bottom: 32px;
+        }
+
+        .provider-models:last-child {
+            margin-bottom: 0;
+        }
+
+        .provider-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .provider-header .provider-logo {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            margin-right: 12px;
+        }
+
+        .provider-header h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .model-count {
+            margin-left: auto;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .model-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .model-option {
+            display: flex;
+            align-items: flex-start;
+            padding: 12px;
+            border-radius: 8px;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .model-option:hover {
+            background: #f0f1f2;
+        }
+
+        .checkbox-wrapper {
+            position: relative;
+            margin-right: 12px;
+            margin-top: 2px;
+        }
+
+        .checkbox-wrapper input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .checkbox-custom {
+            display: block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            transition: all 0.2s ease;
+        }
+
+        .checkbox-wrapper input[type="checkbox"]:checked + .checkbox-custom {
+            background: #007AFF;
+            border-color: #007AFF;
+        }
+
+        .checkbox-custom::after {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 2px;
+            width: 4px;
+            height: 8px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg) scale(0);
+            opacity: 0;
+            transition: all 0.2s ease;
+        }
+
+        .checkbox-wrapper input[type="checkbox"]:checked + .checkbox-custom::after {
+            transform: rotate(45deg) scale(1);
+            opacity: 1;
+        }
+
+        .model-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .model-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1a1a1a;
+        }
+
+        .model-id {
+            font-size: 12px;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        .model-editor-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            padding: 20px 24px;
+            border-top: 1px solid #eee;
+        }
+
+        .primary-button,
+        .secondary-button {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .primary-button {
+            background: #007AFF;
+            color: white;
+            border: none;
+        }
+
+        .primary-button:hover {
+            background: #0066CC;
+        }
+
+        .primary-button:disabled {
+            background: #99C4FF;
             cursor: not-allowed;
+        }
+
+        .secondary-button {
+            background: #f8f9fa;
+            color: #1a1a1a;
+            border: 1px solid #ddd;
+        }
+
+        .secondary-button:hover {
+            background: #f0f1f2;
+        }
+
+        .close-editor {
+            background: none;
+            border: none;
+            padding: 4px;
+            cursor: pointer;
+            color: #666;
+            transition: color 0.2s ease;
+        }
+
+        .close-editor:hover {
+            color: #1a1a1a;
+        }
+
+        .button-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .save-icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-spinner {
+            animation: spin 1s linear infinite;
         }
     `;
     document.head.appendChild(modelStyles);

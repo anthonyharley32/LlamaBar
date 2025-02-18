@@ -36,7 +36,7 @@ export async function decryptApiKey(encryptedKey) {
 export async function validateApiKey(provider, key) {
     const patterns = {
         openai: /^sk-[A-Za-z0-9-_]{20,}$/,  // Allow underscores and be more lenient
-        openrouter: /^sk-or-[A-Za-z0-9-]{20,}$/,
+        openrouter: /^sk-or-v1-[A-Za-z0-9]{64}$/,  // Updated to match actual format
         anthropic: /^sk-ant-[A-Za-z0-9-_]{20,}$/,  // More lenient pattern for Anthropic keys
         perplexity: /^pplx-[A-Za-z0-9]{48}$/,  // Updated to match actual Perplexity key format (pplx- prefix + 48 chars)
         gemini: /^[A-Za-z0-9-]{39}$/,
