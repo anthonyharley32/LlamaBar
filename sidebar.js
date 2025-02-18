@@ -54,16 +54,6 @@ try {
         console.log('🔄 Markdown toggle changed:', markdownEnabled);
     });
 
-    // Add a test message to verify the chat container is working
-    console.log('🧪 Testing message display...');
-    const testMessage = addMessage('assistant', 'Initializing chat...');
-    console.log('✅ Test message added:', testMessage);
-    // Remove the test message after 1 second
-    setTimeout(() => {
-        testMessage.remove();
-        console.log('🧹 Test message removed');
-    }, 1000);
-
     // Function to check if a model is local (Ollama-based)
     function isLocalModel(modelName) {
         if (modelName.startsWith('local:')) return true;
@@ -256,11 +246,8 @@ try {
                 await updateProviderStatus(provider);
             }
             
-            // Initialize model selector and setup wizard
-            const isSetup = await checkSetupStatus();
-            if (isSetup) {
-                await initializeModelSelector();
-            }
+            // Initialize model selector without setup check
+            await initializeModelSelector();
             
             addEditModelsButton();
         } catch (error) {
@@ -679,7 +666,7 @@ try {
                         console.log(`Available models for ${provider}:`, availableModels);
                         
                         if (!availableModels || availableModels.length === 0) {
-                            console.error(`No available models found for ${provider}`);
+                            console.warn(`No available models found for ${provider}`);
                             continue;
                         }
                         
@@ -722,12 +709,30 @@ try {
             // Add sections to dropdown
             sections.forEach(section => selectItems.appendChild(section));
             
-            // If no models are available, show error
+            // If no models are available, show a friendly message
             if (sections.length === 0) {
-                console.error('No models available in selector');
-                selectedText.textContent = 'No models available';
+                console.log('No models available in selector');
+                selectedText.textContent = 'No models configured';
                 selectedLogo.style.display = 'none';
-                showToast('No models available. Please check your configuration.', 'error');
+                
+                // Add a helper section to guide users
+                const helperSection = document.createElement('div');
+                helperSection.className = 'provider-section';
+                helperSection.innerHTML = `
+                    <div class="provider-header">
+                        <span>No Models Available</span>
+                    </div>
+                    <div class="model-list">
+                        <div class="model-option helper-message">
+                            <p>You can add models by:</p>
+                            <ul>
+                                <li>Clicking "Launch Local" to set up Ollama</li>
+                                <li>Adding API keys for other providers</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+                selectItems.appendChild(helperSection);
             }
             
             // Toggle dropdown
@@ -744,14 +749,15 @@ try {
             // Handle model selection
             selectItems.addEventListener('click', async (e) => {
                 const option = e.target.closest('.model-option');
-                if (option) {
+                if (option && option.dataset.value) {  // Only handle clicks on valid model options
                     const value = option.dataset.value;
                     const [provider] = value.split(':');
                     
                     // Update selected option
                     currentModel = value;
-                    selectedText.textContent = option.textContent;
+                    selectedText.textContent = option.querySelector('span').textContent;
                     selectedLogo.src = chrome.runtime.getURL(`assets/${logoMap[provider]}`);
+                    selectedLogo.style.display = 'block';
                     
                     // Update selected state
                     selectItems.querySelectorAll('.model-option').forEach(opt => {
@@ -768,8 +774,8 @@ try {
         } catch (error) {
             console.error('Error initializing model selector:', error);
             const selectedText = document.querySelector('.selected-text');
-            selectedText.textContent = 'Error loading models';
-            showToast('Failed to load models. Please check your configuration.', 'error');
+            selectedText.textContent = 'No models configured';
+            selectedLogo.style.display = 'none';
         }
     }
 
@@ -1325,9 +1331,12 @@ Let's break this down:`;
     });
 
     // Launch local handler
-    launchLocalButton.addEventListener('click', () => {
-        const command = 'OLLAMA_ORIGINS="chrome-extension://*" ollama serve';
-        console.log('Launch local command:', command);
+    launchLocalButton.addEventListener('click', async () => {
+        console.log('Launching local setup...');
+        const isSetup = await checkSetupStatus();
+        if (!isSetup) {
+            showSetupWizard();
+        }
         settingsMenu.classList.remove('show');
     });
 
@@ -1746,6 +1755,9 @@ Let's break this down:`;
 
         .provider-models {
             margin-bottom: 32px;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
         }
 
         .provider-models:last-child {
@@ -1755,7 +1767,10 @@ Let's break this down:`;
         .provider-header {
             display: flex;
             align-items: center;
-            margin-bottom: 16px;
+            padding: 16px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 0;
         }
 
         .provider-header .provider-logo {
@@ -1781,7 +1796,8 @@ Let's break this down:`;
         .model-list {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            padding: 12px;
+            gap: 8px;
         }
 
         .model-option {
@@ -1792,9 +1808,20 @@ Let's break this down:`;
             padding: 12px;
             border-radius: 8px;
             background: #f8f9fa;
-            transition: background 0.2s ease;
+            transition: all 0.2s ease;
             gap: 12px;
             cursor: pointer;
+            border: 1px solid transparent;
+        }
+
+        .model-option:hover {
+            background: #f0f1f2;
+            border-color: #e0e0e0;
+        }
+
+        .model-option.selected {
+            background: #e8f0fe;
+            border-color: #4285f4;
         }
 
         .checkbox-wrapper {
@@ -1820,8 +1847,8 @@ Let's break this down:`;
         }
 
         .checkbox-wrapper input[type="checkbox"]:checked + .checkbox-custom {
-            background: #007AFF;
-            border-color: #007AFF;
+            background: #4285f4;
+            border-color: #4285f4;
         }
 
         .checkbox-custom::after {
@@ -2039,6 +2066,36 @@ Let's break this down:`;
         }
     `;
     document.head.appendChild(modelStyles);
+
+    // Add styles for the helper message
+    const helperStyles = document.createElement('style');
+    helperStyles.textContent = `
+        .helper-message {
+            padding: 16px;
+            cursor: default;
+        }
+        
+        .helper-message:hover {
+            background: #f8f9fa;
+            border-color: transparent;
+        }
+        
+        .helper-message p {
+            margin: 0 0 8px 0;
+            color: #666;
+        }
+        
+        .helper-message ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #666;
+        }
+        
+        .helper-message li {
+            margin: 4px 0;
+        }
+    `;
+    document.head.appendChild(helperStyles);
 
     // Initialize edit models button
     document.addEventListener('DOMContentLoaded', () => {
