@@ -38,7 +38,7 @@ export async function validateApiKey(provider, key) {
         openai: /^sk-[A-Za-z0-9-_]{20,}$/,  // Allow underscores and be more lenient
         openrouter: /^sk-or-[A-Za-z0-9-]{20,}$/,
         anthropic: /^sk-ant-[A-Za-z0-9-_]{20,}$/,  // More lenient pattern for Anthropic keys
-        perplexity: /^pplx-[A-Za-z0-9]{32,}$/,
+        perplexity: /^pplx-[A-Za-z0-9]{48}$/,  // Updated to match actual Perplexity key format (pplx- prefix + 48 chars)
         gemini: /^[A-Za-z0-9-]{39}$/,
         grok: /^[A-Za-z0-9-_]{40,}$/  // Grok API key pattern
     };

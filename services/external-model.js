@@ -447,80 +447,13 @@ export class ExternalModelService {
         });
 
         if (!response.ok) {
-            const error = await response.json();
+            const error = await response.json().catch(() => ({ error: { message: `HTTP error! status: ${response.status}` } }));
             throw new Error(error.error?.message || `Perplexity API error: ${response.status}`);
         }
 
-        return this.handlePerplexityStream(response);
-    }
-
-    static async *handlePerplexityStream(response) {
-        console.log('🔄 Initializing Perplexity stream handler');
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let accumulatedContent = '';
-
-        try {
-            while (true) {
-                const { value, done } = await reader.read();
-                
-                if (done) {
-                    console.log('🏁 Perplexity stream complete');
-                    if (accumulatedContent) {
-                        yield {
-                            type: 'MODEL_RESPONSE',
-                            success: true,
-                            delta: { content: '' },
-                            response: accumulatedContent,
-                            done: true
-                        };
-                    }
-                    break;
-                }
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                    if (!line.trim()) continue;
-                    if (line === 'data: [DONE]') {
-                        console.log('🏁 Received DONE marker');
-                        yield {
-                            type: 'MODEL_RESPONSE',
-                            success: true,
-                            delta: { content: '' },
-                            response: accumulatedContent,
-                            done: true
-                        };
-                        continue;
-                    }
-
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const jsonData = JSON.parse(line.slice(6));
-                            const content = jsonData.choices?.[0]?.delta?.content || '';
-                            if (content) {
-                                accumulatedContent += content;
-                                yield {
-                                    type: 'MODEL_RESPONSE',
-                                    success: true,
-                                    delta: { content },
-                                    response: accumulatedContent,
-                                    done: false
-                                };
-                            }
-                        } catch (e) {
-                            console.warn('⚠️ Error parsing Perplexity JSON:', e);
-                            continue;
-                        }
-                    }
-                }
-            }
-        } finally {
-            reader.releaseLock();
-        }
+        return ExternalModelService.handleProviderStream(response, 'perplexity', (json) => {
+            return json.choices?.[0]?.delta?.content || '';
+        });
     }
 
     static async handleOpenRouter(modelId, prompt, options = {}) {

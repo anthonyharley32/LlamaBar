@@ -493,6 +493,48 @@ try {
                     throw new Error(`Failed to validate Grok API key: ${error.message}`);
                 }
 
+            case 'perplexity':
+                try {
+                    // Validate Perplexity key format first
+                    if (!apiKey.startsWith('pplx-')) {
+                        throw new Error('Invalid Perplexity API key format. Key should start with "pplx-"');
+                    }
+
+                    // Test the API key with a minimal chat completion request
+                    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${apiKey}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            model: 'sonar',  // Use the base Sonar model for validation
+                            messages: [{ role: 'user', content: 'test' }],
+                            max_tokens: 1
+                        })
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 401) {
+                            throw new Error('Invalid API key');
+                        }
+                        throw new Error(`API error: ${response.status}`);
+                    }
+
+                    // Save all Sonar models as enabled
+                    await ApiKeyManager.saveEnabledModels('perplexity', [
+                        'sonar-reasoning-pro',
+                        'sonar-reasoning',
+                        'sonar-pro',
+                        'sonar'
+                    ]);
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Error validating Perplexity key:', error);
+                    throw error;
+                }
+
             // Add other providers here
             default:
                 throw new Error('Provider not supported');
@@ -775,8 +817,10 @@ try {
                 { id: 'google/gemini-pro', name: 'Gemini Pro (OpenRouter)' }
             ],
             perplexity: [
-                { id: 'pplx-70b-online', name: 'Perplexity 70B' },
-                { id: 'pplx-7b-online', name: 'Perplexity 7B' }
+                { id: 'sonar-reasoning-pro', name: 'Sonar Reasoning Pro' },
+                { id: 'sonar-reasoning', name: 'Sonar Reasoning' },
+                { id: 'sonar-pro', name: 'Sonar Pro' },
+                { id: 'sonar', name: 'Sonar' }
             ],
             gemini: [
                 // Gemini 2.0 Models
