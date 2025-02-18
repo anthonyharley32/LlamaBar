@@ -51,9 +51,7 @@
 - **Responsive Design:** HTML/CSS design ensures the sidebar is usable across various screen sizes.
 - **Logging & Error Handling:** Extensive console logging and error handling for debugging and user feedback.
 
-## 6. Future Functionality (Optional Items)
-
-The following items are planned for future releases and are documented in a separate `todo.md` as optional enhancements:
+## 6. Optional Functionality (if time permits)
 
 ### 6.1 Enhanced UI/UX Improvements
 - **Customizable Themes:** Allow users to switch between light, dark, and custom themes.
@@ -63,65 +61,22 @@ The following items are planned for future releases and are documented in a sepa
 
 ### 6.2 Expanded Provider Support
 - **Additional LLM Providers:** Integrate with new LLM APIs (e.g., Cohere, AI21 Labs).
-- **Multi-Provider Queries:** Allow users to send a query to multiple providers simultaneously to compare responses.
 - **Advanced API Key Validation:** More granular and robust API key verification mechanisms.
 
 ### 6.3 Advanced Interaction Features
-- **Offline Mode:** Enable caching of responses for offline access.
-- **Multi-Language Support:** Localize the UI and allow query translation between multiple languages.
-- **Response Summarization:** Automatic summarization of lengthy responses.
-- **Plugin Architecture:** Support third-party plugins for extending functionality.
 - **Enhanced Text Selection:** Expand text selection features with additional actions beyond "Explain" and "Translate".
 
 ### 6.4 Security Enhancements
-- **End-to-End Encryption:** Implement stronger encryption methods for sensitive data.
 - **User Authentication:** Optional account system to sync settings and chat history across devices.
 
 ### 6.5 Developer & Analytics Tools
 - **Detailed Logging Dashboard:** In-app dashboard for API usage analytics and performance metrics.
 - **Custom Prompt Library:** Allow users to save and reuse custom prompts and macros.
 
-## 7. Timeline & Roadmap
-- **MVP (Current Version):** Local AI assistant integration via Ollama, streaming responses, external provider support, API key management, and an interactive sidebar.
-- **Future Releases:** Prioritize UI/UX enhancements, expanded provider support, advanced interaction features, and enhanced security based on user feedback and market demands.
-
-## 8. Risks & Mitigations
+## 7. Risks & Mitigations
 - **Dependency on Ollama:** Provide clear error messages and fallback instructions if the local server is not running.
 - **API Rate Limits/Errors:** Implement robust error handling for external API calls.
 - **Security Vulnerabilities:** Regularly update encryption methods and perform security audits.
 
-## 9. Conclusion
+## 8. Conclusion
 LlamaBar aims to deliver a seamless and private AI assistant experience directly in Chrome. With a strong foundation built on local and external LLM integrations and a clear roadmap for future enhancements, LlamaBar is positioned to meet the needs of its target users while remaining extensible and secure.
-
----
-
-# Future Enhancements (todo.md)
-
-Below are optional items planned for future releases of LlamaBar:
-
-- **UI/UX Enhancements:**
-  - Customizable themes (light/dark/custom).
-  - Resizable sidebar for a flexible user interface.
-  - Voice input integration for hands-free interaction.
-  - Persistent chat history across sessions.
-
-- **Expanded Provider Support:**
-  - Integrate with additional LLM providers (e.g., Cohere, AI21 Labs).
-  - Support multi-provider queries to compare model outputs.
-  - Advanced API key validation with detailed error feedback.
-
-- **Advanced Features:**
-  - Offline mode with cached responses.
-  - Multi-language UI and automatic translation of queries.
-  - Automatic response summarization for lengthy outputs.
-  - Plugin architecture for third-party extensions.
-
-- **Security & Privacy:**
-  - Implement end-to-end encryption for data transmissions.
-  - Introduce optional user authentication for settings sync.
-
-- **Developer & Analytics Tools:**
-  - In-app logging and analytics dashboard.
-  - Performance metrics for streaming and response times.
-  - Custom prompt and macro library for frequent queries.
-

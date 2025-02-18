@@ -343,78 +343,150 @@ input:checked + .slider:before {
 }
 
 /* Markdown Styles */
-.assistant-message h1 {
-    font-size: 1.5em;
-    margin: 0.5em 0;
+.content-container {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-.assistant-message h2 {
-    font-size: 1.3em;
-    margin: 0.5em 0;
+.content-container h1,
+.content-container h2,
+.content-container h3,
+.content-container h4,
+.content-container h5,
+.content-container h6 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    line-height: 1.2;
+    font-weight: 600;
+    color: var(--text-color);
 }
 
-.assistant-message h3 {
-    font-size: 1.1em;
-    margin: 0.5em 0;
+.content-container h1 { font-size: 1.5em; }
+.content-container h2 { font-size: 1.4em; }
+.content-container h3 { font-size: 1.3em; }
+.content-container h4 { font-size: 1.2em; }
+.content-container h5 { font-size: 1.1em; }
+.content-container h6 { font-size: 1em; }
+
+.content-container p {
+    margin: 0.8em 0;
+    line-height: 1.5;
 }
 
-.assistant-message p {
-    margin: 0.5em 0;
+.content-container a {
+    color: #2563eb;
+    text-decoration: none;
 }
 
-.assistant-message ul, 
-.assistant-message ol {
-    margin: 0.5em 0;
-    padding-left: 1.5em;
+.content-container a:hover {
+    text-decoration: underline;
 }
 
-.assistant-message li {
-    margin: 0.25em 0;
-}
-
-.assistant-message code {
-    background: rgba(0, 0, 0, 0.05);
+.content-container code {
+    background-color: rgba(0, 0, 0, 0.05);
     padding: 0.2em 0.4em;
     border-radius: 3px;
-    font-family: monospace;
+    font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
     font-size: 0.9em;
 }
 
-.assistant-message pre {
-    background: rgba(0, 0, 0, 0.05);
+.content-container pre {
+    background-color: rgba(0, 0, 0, 0.05);
     padding: 1em;
     border-radius: 6px;
     overflow-x: auto;
-    margin: 0.5em 0;
+    margin: 1em 0;
 }
 
-.assistant-message pre code {
-    background: none;
+.content-container pre code {
+    background-color: transparent;
     padding: 0;
+    border-radius: 0;
+    font-size: 0.9em;
+    color: inherit;
 }
 
-.assistant-message blockquote {
-    border-left: 3px solid var(--primary-color);
-    margin: 0.5em 0;
+.content-container ul,
+.content-container ol {
+    margin: 0.8em 0;
+    padding-left: 2em;
+}
+
+.content-container li {
+    margin: 0.3em 0;
+}
+
+.content-container blockquote {
+    margin: 1em 0;
     padding-left: 1em;
-    color: #666;
+    border-left: 4px solid #e5e7eb;
+    color: #4b5563;
 }
 
-.assistant-message table {
+.content-container hr {
+    margin: 2em 0;
+    border: none;
+    border-top: 1px solid #e5e7eb;
+}
+
+.content-container table {
     border-collapse: collapse;
-    margin: 0.5em 0;
     width: 100%;
+    margin: 1em 0;
 }
 
-.assistant-message th,
-.assistant-message td {
-    border: 1px solid var(--border-color);
-    padding: 0.4em 0.6em;
+.content-container th,
+.content-container td {
+    border: 1px solid #e5e7eb;
+    padding: 0.5em;
     text-align: left;
 }
 
-.assistant-message th {
-    background: rgba(0, 0, 0, 0.05);
+.content-container th {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.content-container img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    margin: 1em 0;
+}
+
+/* Syntax highlighting */
+.content-container .hljs {
+    display: block;
+    overflow-x: auto;
+    padding: 1em;
+    background: #f3f4f6;
+    color: #1f2937;
+}
+
+.content-container .hljs-comment,
+.content-container .hljs-quote {
+    color: #6b7280;
+    font-style: italic;
+}
+
+.content-container .hljs-keyword,
+.content-container .hljs-selector-tag {
+    color: #7c3aed;
+}
+
+.content-container .hljs-string,
+.content-container .hljs-doctag {
+    color: #059669;
+}
+
+.content-container .hljs-number,
+.content-container .hljs-literal {
+    color: #0891b2;
+}
+
+.content-container .hljs-title,
+.content-container .hljs-section,
+.content-container .hljs-selector-id {
+    color: #2563eb;
+    font-weight: bold;
 }
 
 /* Input Area */

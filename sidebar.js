@@ -1138,7 +1138,7 @@ try {
                 }
 
                 console.log('📝 Creating new assistant message');
-                currentAssistantMessage = addMessage('assistant');
+                currentAssistantMessage = addMessage('assistant', '');
                 currentAssistantMessage.dataset.content = '';
                 
                 // Ensure the new message is properly positioned
@@ -1151,12 +1151,13 @@ try {
                 }
             }
 
-            // Get or create paragraph element
-            let p = currentAssistantMessage.querySelector('p');
-            if (!p) {
-                console.log('📝 Creating new paragraph element');
-                p = document.createElement('p');
-                p.style.cssText = `
+            // Get or create content container
+            let contentContainer = currentAssistantMessage.querySelector('.content-container');
+            if (!contentContainer) {
+                console.log('📝 Creating new content container');
+                contentContainer = document.createElement('div');
+                contentContainer.className = 'content-container';
+                contentContainer.style.cssText = `
                     margin: 0;
                     padding: 0;
                     white-space: pre-wrap;
@@ -1165,7 +1166,7 @@ try {
                     position: relative;
                     z-index: 1;
                 `;
-                currentAssistantMessage.appendChild(p);
+                currentAssistantMessage.appendChild(contentContainer);
             }
 
             // Store the previous scroll position and height
@@ -1176,22 +1177,52 @@ try {
             const newContent = message.response;
             currentAssistantMessage.dataset.content = newContent;
 
-            // Update content
-            if (markdownEnabled && marked) {
+            // Update content with markdown
+            if (markdownEnabled && typeof marked !== 'undefined') {
                 try {
-                    const parsedContent = marked.parse(newContent);
-                    p.innerHTML = parsedContent;
+                    // Only parse complete markdown blocks or if message is done
+                    const shouldParseMarkdown = message.done || 
+                        newContent.includes('\n\n') || 
+                        newContent.length > 100;
+                    
+                    if (shouldParseMarkdown) {
+                        // Configure marked for streaming
+                        marked.setOptions({
+                            breaks: true,
+                            gfm: true,
+                            headerIds: false,
+                            mangle: false
+                        });
+                        
+                        // Parse markdown
+                        const parsedContent = marked.parse(newContent);
+                        
+                        // Create a temporary div to sanitize HTML
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = parsedContent;
+                        
+                        // Remove any script tags for security
+                        const scripts = tempDiv.getElementsByTagName('script');
+                        while (scripts[0]) {
+                            scripts[0].parentNode.removeChild(scripts[0]);
+                        }
+                        
+                        contentContainer.innerHTML = tempDiv.innerHTML;
+                    } else {
+                        // For incomplete chunks, just escape and display as text
+                        contentContainer.textContent = newContent;
+                    }
                 } catch (error) {
                     console.error('❌ Markdown parsing failed:', error);
-                    p.textContent = newContent;
+                    contentContainer.textContent = newContent;
                 }
             } else {
-                p.textContent = newContent;
+                contentContainer.textContent = newContent;
             }
 
             // Ensure proper visibility and layout
             currentAssistantMessage.style.display = 'block';
-            p.style.display = 'block';
+            contentContainer.style.display = 'block';
 
             // Calculate new scroll position
             const newScrollHeight = chatContainer.scrollHeight;
