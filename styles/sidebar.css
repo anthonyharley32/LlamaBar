@@ -353,11 +353,37 @@ input:checked + .slider:before {
 .content-container h4,
 .content-container h5,
 .content-container h6 {
-    margin-top: 1.5em;
-    margin-bottom: 0.5em;
+    margin-top: 0.4em;
+    margin-bottom: 0.2em;
     line-height: 1.2;
     font-weight: 600;
     color: var(--text-color);
+}
+
+/* First header in container shouldn't have top margin */
+.content-container > h1:first-child,
+.content-container > h2:first-child,
+.content-container > h3:first-child,
+.content-container > h4:first-child,
+.content-container > h5:first-child,
+.content-container > h6:first-child {
+    margin-top: 0;
+}
+
+/* Reduce spacing after headers if followed by a list */
+.content-container h1 + ul,
+.content-container h2 + ul,
+.content-container h3 + ul,
+.content-container h4 + ul,
+.content-container h5 + ul,
+.content-container h6 + ul,
+.content-container h1 + ol,
+.content-container h2 + ol,
+.content-container h3 + ol,
+.content-container h4 + ol,
+.content-container h5 + ol,
+.content-container h6 + ol {
+    margin-top: 0.2em;
 }
 
 .content-container h1 { font-size: 1.5em; }
@@ -368,8 +394,8 @@ input:checked + .slider:before {
 .content-container h6 { font-size: 1em; }
 
 .content-container p {
-    margin: 0.8em 0;
-    line-height: 1.5;
+    margin: 0.4em 0;
+    line-height: 1.4;
 }
 
 .content-container a {
@@ -391,10 +417,10 @@ input:checked + .slider:before {
 
 .content-container pre {
     background-color: rgba(0, 0, 0, 0.05);
-    padding: 1em;
+    padding: 0.8em;
     border-radius: 6px;
     overflow-x: auto;
-    margin: 1em 0;
+    margin: 0.6em 0;
 }
 
 .content-container pre code {
@@ -407,23 +433,56 @@ input:checked + .slider:before {
 
 .content-container ul,
 .content-container ol {
-    margin: 0.8em 0;
-    padding-left: 2em;
+    margin: 0.4em 0;
+    padding-left: 1.5em;
 }
 
 .content-container li {
-    margin: 0.3em 0;
+    margin: 0;
+    line-height: 1.4;
+}
+
+/* Remove extra margins from paragraphs inside list items */
+.content-container li p {
+    margin: 0;
+}
+
+/* Adjust spacing for headers in lists */
+.content-container li h1,
+.content-container li h2,
+.content-container li h3,
+.content-container li h4,
+.content-container li h5,
+.content-container li h6 {
+    margin-top: 0.4em;
+    margin-bottom: 0.2em;
+}
+
+/* Keep normal paragraph spacing outside of lists */
+.content-container > p {
+    margin: 0.4em 0;
+    line-height: 1.4;
+}
+
+/* Ensure proper spacing between list items with multiple paragraphs */
+.content-container li + li {
+    margin-top: 0.2em;
+}
+
+/* Add spacing between different types of content in list items */
+.content-container li > * + * {
+    margin-top: 0.2em;
 }
 
 .content-container blockquote {
-    margin: 1em 0;
+    margin: 0.6em 0;
     padding-left: 1em;
     border-left: 4px solid #e5e7eb;
     color: #4b5563;
 }
 
 .content-container hr {
-    margin: 2em 0;
+    margin: 1em 0;
     border: none;
     border-top: 1px solid #e5e7eb;
 }
@@ -431,7 +490,7 @@ input:checked + .slider:before {
 .content-container table {
     border-collapse: collapse;
     width: 100%;
-    margin: 1em 0;
+    margin: 0.6em 0;
 }
 
 .content-container th,
@@ -449,7 +508,7 @@ input:checked + .slider:before {
     max-width: 100%;
     height: auto;
     border-radius: 6px;
-    margin: 1em 0;
+    margin: 0.6em 0;
 }
 
 /* Syntax highlighting */

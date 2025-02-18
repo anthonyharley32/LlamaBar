@@ -1105,6 +1105,10 @@ try {
         showToast(errorMessage, 'error');
     }
 
+    // Add this at the top with other variables
+    let scrollTimeout = null;
+    let isUserScrolled = false;
+
     // Single function to handle message updates
     function handleModelResponse(message) {
         console.log('🎯 Handling model response:', {
@@ -1128,6 +1132,11 @@ try {
         try {
             const chatContainer = document.getElementById('chat-messages');
             
+            // Track if user has scrolled up
+            if (!isUserScrolled) {
+                isUserScrolled = chatContainer.scrollTop + chatContainer.clientHeight < chatContainer.scrollHeight - 10;
+            }
+
             // Create new message if none exists
             if (!currentAssistantMessage) {
                 // First, ensure proper spacing by adding margin to the last message
@@ -1168,10 +1177,6 @@ try {
                 `;
                 currentAssistantMessage.appendChild(contentContainer);
             }
-
-            // Store the previous scroll position and height
-            const previousScrollTop = chatContainer.scrollTop;
-            const previousScrollHeight = chatContainer.scrollHeight;
 
             // Accumulate content
             const newContent = message.response;
@@ -1224,25 +1229,35 @@ try {
             currentAssistantMessage.style.display = 'block';
             contentContainer.style.display = 'block';
 
-            // Calculate new scroll position
-            const newScrollHeight = chatContainer.scrollHeight;
-            const heightDifference = newScrollHeight - previousScrollHeight;
-            
             // Smooth scroll handling
-            requestAnimationFrame(() => {
-                // If user has scrolled up, maintain their position
-                if (previousScrollTop + chatContainer.clientHeight < previousScrollHeight) {
-                    chatContainer.scrollTop = previousScrollTop;
-                } else {
-                    // If at bottom, scroll to new content
-                    chatContainer.scrollTop = newScrollHeight;
+            if (!isUserScrolled) {
+                // Clear any pending scroll timeout
+                if (scrollTimeout) {
+                    clearTimeout(scrollTimeout);
                 }
-            });
+                
+                // Debounce the scroll to avoid jank
+                scrollTimeout = setTimeout(() => {
+                    chatContainer.scrollTo({
+                        top: chatContainer.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }, 100); // Adjust this delay if needed
+            }
 
-            // Reset current message when done
+            // Reset scroll tracking when message is complete
             if (message.done) {
                 console.log('✅ Message complete, resetting current message');
                 currentAssistantMessage = null;
+                isUserScrolled = false;
+                if (scrollTimeout) {
+                    clearTimeout(scrollTimeout);
+                }
+                // Final scroll to bottom
+                chatContainer.scrollTo({
+                    top: chatContainer.scrollHeight,
+                    behavior: 'smooth'
+                });
             }
         } catch (error) {
             console.error('❌ Error handling model response:', error);
@@ -2202,6 +2217,13 @@ Let's break this down:`;
             showToast(`Error removing ${provider} API key`, 'error');
         }
     }
+
+    // Add scroll listener to detect when user manually scrolls
+    document.getElementById('chat-messages').addEventListener('scroll', function() {
+        const chatContainer = this;
+        // Check if user has scrolled up
+        isUserScrolled = chatContainer.scrollTop + chatContainer.clientHeight < chatContainer.scrollHeight - 10;
+    });
 } catch (error) {
     console.error('❌ Initialization error:', error);
 } 
