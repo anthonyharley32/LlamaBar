@@ -46,7 +46,7 @@ try {
     let currentModel = 'local:llama3.2:1b';  // Initialize with local: prefix
     let currentImage = null;
     let setupWizardFrame = null;
-    let markdownEnabled = false;
+    let markdownEnabled = true;
 
     // Initialize markdown toggle
     markdownToggle.addEventListener('change', (e) => {
@@ -301,9 +301,6 @@ try {
             } else if (provider === 'gemini') {
                 // Save all Gemini models as enabled
                 await ApiKeyManager.saveEnabledModels('gemini', [
-                    // Gemini 2.0 Models
-                    'gemini-2.0-pro',
-                    'gemini-2.0-vision',
                     // Gemini 1.5 Models
                     'gemini-1.5-pro',
                     'gemini-1.5-flash',
@@ -453,9 +450,6 @@ try {
                 
                 // Save all Gemini models as enabled
                 await ApiKeyManager.saveEnabledModels('gemini', [
-                    // Gemini 2.0 Models
-                    'gemini-2.0-pro',
-                    'gemini-2.0-vision',
                     // Gemini 1.5 Models
                     'gemini-1.5-pro',
                     'gemini-1.5-flash',
@@ -697,10 +691,15 @@ try {
                             const providerSection = document.createElement('div');
                             providerSection.className = 'provider-section';
                             const logoFile = logoMap[provider];
+                            
+                            // Format provider name
+                            let providerDisplay = provider === 'openai' ? 'OpenAI' : 
+                                                provider.charAt(0).toUpperCase() + provider.slice(1);
+                            
                             providerSection.innerHTML = `
                                 <div class="provider-header">
                                     <img class="provider-logo" src="${chrome.runtime.getURL(`assets/${logoFile}`)}" alt="${provider}">
-                                    <span>${provider.charAt(0).toUpperCase() + provider.slice(1)} Models</span>
+                                    <span>${providerDisplay} Models</span>
                                 </div>
                             `;
                             
@@ -772,6 +771,10 @@ try {
             // Toggle dropdown with new elements
             newSelectSelected.addEventListener('click', (e) => {
                 e.stopPropagation();
+                // Close settings menu if open
+                settingsMenu.classList.remove('show');
+                apiKeyDropdown.classList.remove('show');
+                // Toggle model selector
                 customSelect.classList.toggle('open');
             });
             
@@ -886,8 +889,8 @@ try {
         const models = {
             anthropic: [
                 // Claude 3.5 Models
-                { id: 'claude-3.5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
-                { id: 'claude-3.5-haiku-20241022', name: 'Claude 3.5 Haiku' },
+                { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
+                { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' },
                 // Claude 3 Models
                 { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
                 { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet' },
@@ -903,9 +906,6 @@ try {
                 { id: 'sonar', name: 'Sonar' }
             ],
             gemini: [
-                // Gemini 2.0 Models
-                { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro' },
-                { id: 'gemini-2.0-vision', name: 'Gemini 2.0 Vision' },
                 // Gemini 1.5 Models
                 { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
                 { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
@@ -1384,6 +1384,8 @@ Let's break this down:`;
     settingsButton.addEventListener('click', (e) => {
         e.stopPropagation();
         const isVisible = settingsMenu.classList.contains('show');
+        // Close model selector if open
+        document.querySelector('.custom-select').classList.remove('open');
         // Close any open dropdowns first
         document.querySelectorAll('.settings-menu, .api-key-dropdown').forEach(el => {
             el.classList.remove('show');

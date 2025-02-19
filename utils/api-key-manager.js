@@ -17,7 +17,8 @@ export class ApiKeyManager {
                 throw new Error('Failed to encrypt API key');
             }
 
-            await chrome.storage.sync.set({
+            // Use local storage instead of sync
+            await chrome.storage.local.set({
                 [`apiKey_${provider}`]: encryptedKey
             });
 
@@ -52,7 +53,7 @@ export class ApiKeyManager {
     static async getApiKey(provider) {
         try {
             console.log(`Retrieving API key for ${provider}...`);
-            const result = await chrome.storage.sync.get(`apiKey_${provider}`);
+            const result = await chrome.storage.local.get(`apiKey_${provider}`);
             const encryptedKey = result[`apiKey_${provider}`];
             
             if (!encryptedKey) {
@@ -60,14 +61,14 @@ export class ApiKeyManager {
                 return null;
             }
 
-            const decryptedKey = await decryptApiKey(encryptedKey);
-            if (!decryptedKey) {
-                console.error(`Failed to decrypt API key for ${provider}`);
+            try {
+                const decryptedKey = await decryptApiKey(encryptedKey);
+                console.log(`Successfully retrieved API key for ${provider}`);
+                return decryptedKey;
+            } catch (error) {
+                console.error(`Failed to decrypt API key for ${provider}:`, error);
                 return null;
             }
-
-            console.log(`Successfully retrieved API key for ${provider}`);
-            return decryptedKey;
         } catch (error) {
             console.error(`Error retrieving API key for ${provider}:`, error);
             return null;
@@ -75,7 +76,7 @@ export class ApiKeyManager {
     }
 
     static async deleteApiKey(provider) {
-        await chrome.storage.sync.remove(`apiKey_${provider}`);
+        await chrome.storage.local.remove(`apiKey_${provider}`);
         await this.clearEnabledModels(provider);
     }
 
@@ -90,7 +91,7 @@ export class ApiKeyManager {
     }
 
     static async getAllProviders() {
-        const storage = await chrome.storage.sync.get(null);
+        const storage = await chrome.storage.local.get(null);
         return Object.keys(storage)
             .filter(key => key.startsWith('apiKey_'))
             .map(key => key.replace('apiKey_', ''));
@@ -98,7 +99,7 @@ export class ApiKeyManager {
 
     static async saveEnabledModels(provider, models) {
         if (await this.hasApiKey(provider)) {
-            await chrome.storage.sync.set({
+            await chrome.storage.local.set({
                 [`enabledModels_${provider}`]: models
             });
         }
@@ -106,13 +107,13 @@ export class ApiKeyManager {
 
     static async getEnabledModels(provider) {
         if (await this.hasApiKey(provider)) {
-            const result = await chrome.storage.sync.get(`enabledModels_${provider}`);
+            const result = await chrome.storage.local.get(`enabledModels_${provider}`);
             return result[`enabledModels_${provider}`] || [];
         }
         return [];
     }
 
     static async clearEnabledModels(provider) {
-        await chrome.storage.sync.remove(`enabledModels_${provider}`);
+        await chrome.storage.local.remove(`enabledModels_${provider}`);
     }
 } 

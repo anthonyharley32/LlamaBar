@@ -1,35 +1,121 @@
-// Utility functions for encrypting and decrypting API keys
-const ENCRYPTION_KEY = 'llamabar_key_v1'; // This is just for basic obfuscation
-
-// Simple XOR encryption for basic obfuscation
-function xorEncrypt(text, key) {
-    let result = '';
-    for (let i = 0; i < text.length; i++) {
-        result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+// Utility functions for encrypting and decrypting API keys using WebCrypto API
+class SecureKeyManager {
+    static async encrypt(text) {
+        try {
+            // Generate a random salt for each encryption
+            const salt = crypto.getRandomValues(new Uint8Array(16));
+            
+            // Derive a key from the extension's ID (unique per installation)
+            const keyMaterial = await crypto.subtle.importKey(
+                "raw",
+                new TextEncoder().encode(chrome.runtime.id),
+                { name: "PBKDF2" },
+                false,
+                ["deriveBits", "deriveKey"]
+            );
+            
+            // Create the actual encryption key
+            const key = await crypto.subtle.deriveKey(
+                {
+                    name: "PBKDF2",
+                    salt: salt,
+                    iterations: 100000,
+                    hash: "SHA-256"
+                },
+                keyMaterial,
+                { name: "AES-GCM", length: 256 },
+                false,
+                ["encrypt"]
+            );
+            
+            // Generate random IV
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            
+            // Encrypt the data
+            const encrypted = await crypto.subtle.encrypt(
+                {
+                    name: "AES-GCM",
+                    iv: iv
+                },
+                key,
+                new TextEncoder().encode(text)
+            );
+            
+            // Combine salt, iv, and encrypted data into a single array
+            const encryptedData = new Uint8Array([
+                ...salt,
+                ...iv,
+                ...new Uint8Array(encrypted)
+            ]);
+            
+            // Convert to base64 for storage
+            return btoa(String.fromCharCode(...encryptedData));
+        } catch (error) {
+            console.error('Encryption error:', error);
+            throw new Error('Failed to encrypt data');
+        }
     }
-    return result;
+
+    static async decrypt(encryptedData) {
+        try {
+            // Convert from base64
+            const data = new Uint8Array(
+                atob(encryptedData)
+                .split('')
+                .map(char => char.charCodeAt(0))
+            );
+            
+            // Extract salt, iv, and encrypted data
+            const salt = data.slice(0, 16);
+            const iv = data.slice(16, 28);
+            const encrypted = data.slice(28);
+            
+            // Recreate the key
+            const keyMaterial = await crypto.subtle.importKey(
+                "raw",
+                new TextEncoder().encode(chrome.runtime.id),
+                { name: "PBKDF2" },
+                false,
+                ["deriveBits", "deriveKey"]
+            );
+            
+            const key = await crypto.subtle.deriveKey(
+                {
+                    name: "PBKDF2",
+                    salt: salt,
+                    iterations: 100000,
+                    hash: "SHA-256"
+                },
+                keyMaterial,
+                { name: "AES-GCM", length: 256 },
+                false,
+                ["decrypt"]
+            );
+            
+            // Decrypt
+            const decrypted = await crypto.subtle.decrypt(
+                {
+                    name: "AES-GCM",
+                    iv: iv
+                },
+                key,
+                encrypted
+            );
+            
+            return new TextDecoder().decode(decrypted);
+        } catch (error) {
+            console.error('Decryption error:', error);
+            throw new Error('Failed to decrypt data');
+        }
+    }
 }
 
 export async function encryptApiKey(apiKey) {
-    try {
-        // Use simple XOR encryption instead of WebCrypto API
-        const encrypted = xorEncrypt(apiKey, ENCRYPTION_KEY);
-        return btoa(encrypted);
-    } catch (error) {
-        console.error('Encryption error:', error);
-        return null;
-    }
+    return SecureKeyManager.encrypt(apiKey);
 }
 
 export async function decryptApiKey(encryptedKey) {
-    try {
-        // Decrypt using XOR
-        const encrypted = atob(encryptedKey);
-        return xorEncrypt(encrypted, ENCRYPTION_KEY);
-    } catch (error) {
-        console.error('Decryption error:', error);
-        return null;
-    }
+    return SecureKeyManager.decrypt(encryptedKey);
 }
 
 // Validate API key format for different providers
@@ -85,7 +171,7 @@ export async function validateApiKey(provider, key) {
         try {
             console.log('Testing Anthropic API key with test request...');
             const testRequest = {
-                model: 'claude-3.5-sonnet-20241022',
+                model: 'claude-3-5-sonnet-20241022',
                 messages: [{ role: 'user', content: 'test' }],
                 max_tokens: 1024
             };
