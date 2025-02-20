@@ -70,6 +70,9 @@ The extension is built using:
 - Chrome Extension Manifest V3
 - Ollama API
 
+## Issues
+Listed under issues tab on Github
+
 ## License
 
 [MIT License](LICENSE)
