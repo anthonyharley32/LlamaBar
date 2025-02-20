@@ -1109,6 +1109,18 @@ try {
     let scrollTimeout = null;
     let isUserScrolled = false;
 
+    // Add KaTeX configuration
+    const katexConfig = {
+        delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+            { left: "\\[", right: "\\]", display: true },
+            { left: "\\(", right: "\\)", display: false }
+        ],
+        throwOnError: false,
+        output: 'html'
+    };
+
     // Single function to handle message updates
     function handleModelResponse(message) {
         console.log('🎯 Handling model response:', {
@@ -1182,8 +1194,8 @@ try {
             const newContent = message.response;
             currentAssistantMessage.dataset.content = newContent;
 
-            // Update content with markdown
-            if (markdownEnabled && typeof marked !== 'undefined') {
+            // Update content with markdown and math
+            if (markdownEnabled && typeof marked !== 'undefined' && typeof katex !== 'undefined') {
                 try {
                     // Only parse complete markdown blocks or if message is done
                     const shouldParseMarkdown = message.done || 
@@ -1213,12 +1225,17 @@ try {
                         }
                         
                         contentContainer.innerHTML = tempDiv.innerHTML;
+
+                        // Render math in the content
+                        if (typeof renderMathInElement !== 'undefined') {
+                            renderMathInElement(contentContainer, katexConfig);
+                        }
                     } else {
                         // For incomplete chunks, just escape and display as text
                         contentContainer.textContent = newContent;
                     }
                 } catch (error) {
-                    console.error('❌ Markdown parsing failed:', error);
+                    console.error('❌ Markdown/Math parsing failed:', error);
                     contentContainer.textContent = newContent;
                 }
             } else {

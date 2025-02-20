@@ -1026,4 +1026,36 @@ button:disabled {
 
 .openrouter-model-input button:hover {
     opacity: 0.9;
+}
+
+/* Math Styles */
+.katex-display {
+    margin: 1em 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-top: 0.2em;
+    padding-bottom: 0.2em;
+}
+
+.katex {
+    font-size: 1.1em;
+}
+
+.content-container .katex-display > .katex {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.content-container .katex-display > .katex > .katex-html {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.2em 0;
+}
+
+/* Inline math */
+.content-container p .katex {
+    font-size: 1.1em;
+    vertical-align: -0.1em;
 } 
