@@ -19,6 +19,26 @@ A Chrome extension that provides a local AI assistant powered by Ollama, running
 ollama pull llama3.2:1b
 ```
 
+## Technical Details
+
+- Chrome Extension Manifest Version: v3
+- Supported External Providers:
+  - OpenAI API (o1, o1-mini, o3-mini, o3-mini-high, gpt-4o, gpt-4o-mini)
+  - Anthropic API (Claude 3.5 and Claude 3 series)
+  - Google Gemini API (Gemini 1.5 and 1.0 series)
+  - Perplexity API (Sonar series)
+  - Grok API (Grok 2 series)
+  - OpenRouter API (custom model selection)
+- Dependencies:
+  - Marked.js for Markdown rendering
+  - Chrome Extension APIs:
+    - activeTab
+    - scripting
+    - sidePanel
+    - storage
+  - WebCrypto API for secure key storage
+  - Native Messaging for Ollama integration
+
 ## Installation
 
 1. Clone this repository or download the source code

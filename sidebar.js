@@ -1249,15 +1249,17 @@ try {
             if (message.done) {
                 console.log('✅ Message complete, resetting current message');
                 currentAssistantMessage = null;
-                isUserScrolled = false;
+                // Do not reset isUserScrolled here
                 if (scrollTimeout) {
                     clearTimeout(scrollTimeout);
                 }
-                // Final scroll to bottom
-                chatContainer.scrollTo({
-                    top: chatContainer.scrollHeight,
-                    behavior: 'smooth'
-                });
+                // Only scroll to bottom if user hasn't scrolled up
+                if (!isUserScrolled) {
+                    chatContainer.scrollTo({
+                        top: chatContainer.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }
             }
         } catch (error) {
             console.error('❌ Error handling model response:', error);
