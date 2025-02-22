@@ -584,6 +584,14 @@ input:checked + .slider:before {
     background: #f8f9fa;
     border-radius: 16px;
     padding: 12px 16px;
+    transition: background-color 0.2s ease;
+    position: relative;
+}
+
+.input-wrapper.drag-over {
+    background-color: #ecedef;
+    outline: 2px dashed #ccc;
+    outline-offset: -2px;
 }
 
 .input-controls {

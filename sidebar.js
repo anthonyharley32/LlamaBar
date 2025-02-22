@@ -576,6 +576,7 @@ try {
                                 modelName.toLowerCase().includes('dream') || 
                                 modelName.toLowerCase().includes('image');
             
+            warningContainer.style.display = 'inline-flex';
             if (!isVisionModel) {
                 warningContainer.innerHTML = `
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -583,7 +584,6 @@ try {
                     </svg>
                     Current model doesn't support images
                 `;
-                warningContainer.style.display = 'inline-flex';
                 inputExplainButton.style.display = 'none'; // Hide explain button
             } else {
                 warningContainer.style.display = 'none';
@@ -591,6 +591,11 @@ try {
                 const text = userInput.value.trim();
                 inputExplainButton.style.display = text ? 'block' : 'none';
             }
+        } else {
+            warningContainer.style.display = 'none';
+            // Show explain button if there's text
+            const text = userInput.value.trim();
+            inputExplainButton.style.display = text ? 'block' : 'none';
         }
     });
 
@@ -1124,7 +1129,7 @@ try {
     }
 
     // Handle user input
-    function handleUserInput(text) {
+    async function handleUserInput(text) {
         // Create message content
         let messageContent = text;
         if (currentImage) {
@@ -1149,16 +1154,45 @@ try {
         if (currentImage) {
             if (isVisionModel) {
                 console.log('Preparing vision model request');
-                const base64Data = currentImage.split(',')[1] || currentImage;
-                prompt = `<image>data:image/jpeg;base64,${base64Data}</image>\n${text}`;
+                // Extract MIME type and base64 data
+                const [mimeHeader, originalBase64Data] = currentImage.split(',');
+                let mimeType = mimeHeader.match(/data:(.*?);/)?.[1] || 'image/jpeg';
+                let base64Data = originalBase64Data;
+                
+                // Convert WebP to JPEG
+                if (mimeType === 'image/webp') {
+                    try {
+                        base64Data = await new Promise((resolve, reject) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.width;
+                                canvas.height = img.height;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0);
+                                const jpegData = canvas.toDataURL('image/jpeg', 0.9);
+                                resolve(jpegData.split(',')[1]);
+                            };
+                            img.onerror = () => reject(new Error('Failed to load image'));
+                            img.src = currentImage;
+                        });
+                        mimeType = 'image/jpeg';
+                    } catch (error) {
+                        console.error('Failed to convert WebP to JPEG:', error);
+                        // Fall back to original image data
+                        base64Data = originalBase64Data;
+                    }
+                }
+                
+                prompt = `<image>data:${mimeType};base64,${base64Data}</image>\n${text}`;
             } else {
                 console.warn('Attempting to use image with non-vision model:', currentModel);
                 prompt = `[Image]\n${text}`;
             }
         }
         
-        // Add markdown instruction if enabled
-        if (markdownEnabled) {
+        // Only add markdown instruction if explicitly enabled
+        if (markdownEnabled && text.includes('```') || text.includes('`') || text.includes('#')) {
             prompt = `Please format your response in Markdown.\n\n${prompt}`;
         }
         
@@ -2510,6 +2544,67 @@ Let's break this down:`;
         }
     `;
     document.head.appendChild(warningStyles);
+
+    // Add drag and drop event listeners
+    const inputWrapper = document.querySelector('.input-wrapper');
+    
+    inputWrapper.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        inputWrapper.classList.add('drag-over');
+    });
+
+    inputWrapper.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        inputWrapper.classList.remove('drag-over');
+    });
+
+    inputWrapper.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        inputWrapper.classList.remove('drag-over');
+
+        const items = e.dataTransfer.items;
+        for (const item of items) {
+            if (item.type.indexOf('image') === 0) {
+                const file = item.getAsFile();
+                const reader = new FileReader();
+                
+                reader.onload = async function(event) {
+                    // Match the paste handler's simpler approach
+                    currentImage = event.target.result;
+                    displayImagePreview(currentImage);
+
+                    // Check if current model supports vision
+                    const modelName = currentModel.replace('local:', '');
+                    const isVisionModel = modelName.toLowerCase().includes('vision') || 
+                                        modelName.toLowerCase().includes('dream') || 
+                                        modelName.toLowerCase().includes('image');
+
+                    // Show warning if model doesn't support vision
+                    if (!isVisionModel) {
+                        warningContainer.innerHTML = `
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Current model doesn't support images
+                        `;
+                        warningContainer.style.display = 'inline-flex';
+                        inputExplainButton.style.display = 'none';
+                    } else {
+                        warningContainer.style.display = 'none';
+                        // Only show explain button if there's text
+                        const text = userInput.value.trim();
+                        inputExplainButton.style.display = text ? 'block' : 'none';
+                    }
+                };
+                
+                reader.readAsDataURL(file);
+                break;
+            }
+        }
+    });
 } catch (error) {
     console.error('❌ Initialization error:', error);
 } 
