@@ -568,6 +568,30 @@ try {
         
         // Update provider logo
         updateProviderLogo(currentModel);
+        
+        // Check if there's an image and update warning
+        if (currentImage) {
+            const modelName = currentModel.replace('local:', '');
+            const isVisionModel = modelName.toLowerCase().includes('vision') || 
+                                modelName.toLowerCase().includes('dream') || 
+                                modelName.toLowerCase().includes('image');
+            
+            if (!isVisionModel) {
+                warningContainer.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Current model doesn't support images
+                `;
+                warningContainer.style.display = 'inline-flex';
+                inputExplainButton.style.display = 'none'; // Hide explain button
+            } else {
+                warningContainer.style.display = 'none';
+                // Only show explain button if there's text
+                const text = userInput.value.trim();
+                inputExplainButton.style.display = text ? 'block' : 'none';
+            }
+        }
     });
 
     // Function to update provider logo
@@ -934,10 +958,36 @@ try {
                 const blob = item.getAsFile();
                 const reader = new FileReader();
                 
-                reader.onload = function(event) {
+                reader.onload = async function(event) {
                     const base64Image = event.target.result;
                     displayImagePreview(base64Image);
                     currentImage = base64Image;
+                    
+                    // Always show container when there's an image
+                    explainButtonContainer.style.display = 'block';
+                    
+                    // Check if current model supports vision
+                    const modelName = currentModel.replace('local:', '');
+                    const isVisionModel = modelName.toLowerCase().includes('vision') || 
+                                        modelName.toLowerCase().includes('dream') || 
+                                        modelName.toLowerCase().includes('image');
+                    
+                    // Show warning if model doesn't support vision
+                    if (!isVisionModel) {
+                        warningContainer.innerHTML = `
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Current model doesn't support images
+                        `;
+                        warningContainer.style.display = 'inline-flex';
+                        inputExplainButton.style.display = 'none'; // Hide explain button
+                    } else {
+                        warningContainer.style.display = 'none';
+                        // Only show explain button if there's text
+                        const text = userInput.value.trim();
+                        inputExplainButton.style.display = text ? 'block' : 'none';
+                    }
                 };
                 
                 reader.readAsDataURL(blob);
@@ -950,16 +1000,29 @@ try {
     function displayImagePreview(base64Image) {
         imagePreview.innerHTML = `
             <img src="${base64Image}" alt="Pasted image">
-            <button class="remove-image" onclick="removeImage()">×</button>
+            <button class="remove-image" aria-label="Remove image">×</button>
         `;
         imagePreview.classList.add('active');
+        
+        // Add event listener to the remove button
+        const removeButton = imagePreview.querySelector('.remove-image');
+        removeButton.addEventListener('click', removeImage);
     }
 
-    // Remove image
-    window.removeImage = function() {
+    // Remove image (change to regular function instead of window property)
+    function removeImage() {
         imagePreview.innerHTML = '';
         imagePreview.classList.remove('active');
         currentImage = null;
+        warningContainer.style.display = 'none';
+        // Show explain button if there's text
+        const text = userInput.value.trim();
+        if (text) {
+            explainButtonContainer.style.display = 'block';
+            inputExplainButton.style.display = 'block';
+        } else {
+            explainButtonContainer.style.display = 'none';
+        }
     }
 
     // Add message to chat
@@ -980,7 +1043,7 @@ try {
             }
         }
         
-        // Handle markdown formatting if enabled
+        // Handle markdown formatting if enabled for assistant messages
         if (type === 'assistant' && markdownEnabled && typeof marked !== 'undefined') {
             try {
                 messageDiv.innerHTML = marked.parse(content);
@@ -988,7 +1051,63 @@ try {
                 console.error('Markdown parsing failed:', error);
                 messageDiv.textContent = content;
             }
+        } else if (type === 'user' && content.includes('<img')) {
+            // For user messages with images, use innerHTML but sanitize
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = content;
+            
+            // Only allow specific HTML elements and attributes
+            const allowedTags = ['div', 'img'];
+            const allowedAttributes = {
+                'img': ['src', 'alt']
+            };
+            
+            function sanitizeNode(node) {
+                if (node.nodeType === 3) { // Text node
+                    return node.cloneNode(true);
+                }
+                
+                if (node.nodeType !== 1) { // Not an element node
+                    return null;
+                }
+                
+                if (!allowedTags.includes(node.tagName.toLowerCase())) {
+                    return document.createTextNode(node.textContent);
+                }
+                
+                const newNode = document.createElement(node.tagName);
+                
+                // Copy allowed attributes
+                const allowedAttrs = allowedAttributes[node.tagName.toLowerCase()] || [];
+                allowedAttrs.forEach(attr => {
+                    if (node.hasAttribute(attr)) {
+                        newNode.setAttribute(attr, node.getAttribute(attr));
+                    }
+                });
+                
+                // Recursively sanitize child nodes
+                Array.from(node.childNodes).forEach(child => {
+                    const sanitizedChild = sanitizeNode(child);
+                    if (sanitizedChild) {
+                        newNode.appendChild(sanitizedChild);
+                    }
+                });
+                
+                return newNode;
+            }
+            
+            // Clear the message div
+            messageDiv.innerHTML = '';
+            
+            // Add sanitized nodes
+            Array.from(tempDiv.childNodes).forEach(node => {
+                const sanitizedNode = sanitizeNode(node);
+                if (sanitizedNode) {
+                    messageDiv.appendChild(sanitizedNode);
+                }
+            });
         } else {
+            // For regular messages without HTML
             messageDiv.textContent = content;
         }
         
@@ -1356,7 +1475,23 @@ try {
     // Handle input changes for explain button visibility
     userInput.addEventListener('input', () => {
         const text = userInput.value.trim();
-        explainButtonContainer.style.display = text ? 'block' : 'none';
+        // Show container if there's text or an image
+        explainButtonContainer.style.display = (text || currentImage) ? 'block' : 'none';
+        
+        // Check if we should show the explain button
+        if (currentImage) {
+            const modelName = currentModel.replace('local:', '');
+            const isVisionModel = modelName.toLowerCase().includes('vision') || 
+                                modelName.toLowerCase().includes('dream') || 
+                                modelName.toLowerCase().includes('image');
+            
+            // Only show explain button if model supports vision and there's text
+            inputExplainButton.style.display = (isVisionModel && text) ? 'block' : 'none';
+        } else {
+            // No image, show explain button if there's text
+            inputExplainButton.style.display = text ? 'block' : 'none';
+        }
+        
         autoResizeTextarea();
     });
 
@@ -2245,6 +2380,32 @@ Let's break this down:`;
         // Check if user has scrolled up
         isUserScrolled = chatContainer.scrollTop + chatContainer.clientHeight < chatContainer.scrollHeight - 10;
     });
+
+    // Add warning message container
+    const warningContainer = document.createElement('div');
+    warningContainer.id = 'image-warning';
+    warningContainer.className = 'image-warning';
+    warningContainer.style.display = 'none';
+    explainButtonContainer.appendChild(warningContainer);
+
+    // Add styles for warning message
+    const warningStyles = document.createElement('style');
+    warningStyles.textContent = `
+        .image-warning {
+            color: #FF3B30;
+            font-size: 12px;
+            margin-left: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .image-warning svg {
+            width: 14px;
+            height: 14px;
+        }
+    `;
+    document.head.appendChild(warningStyles);
 } catch (error) {
     console.error('❌ Initialization error:', error);
 } 

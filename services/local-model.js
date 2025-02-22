@@ -69,6 +69,53 @@ export class LocalModelService {
         }
     }
 
+    static async getModelCapabilities(model) {
+        try {
+            // First check if model exists
+            const models = await this.getAvailableModels();
+            const modelInfo = models.find(m => m.name === model);
+            
+            if (!modelInfo) {
+                throw new Error(`Model ${model} not found`);
+            }
+
+            // Get model details using modelfile show
+            const response = await fetch(`${OLLAMA_API}/api/show`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name: model })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch model capabilities');
+            }
+
+            const data = await response.json();
+            const modelfile = data.modelfile || '';
+            
+            // Parse modelfile for capabilities
+            const capabilities = {
+                vision: false,
+                // Add other capabilities as needed
+            };
+
+            // Check for vision capability through modelfile parameters
+            capabilities.vision = modelfile.includes('multimodal') || 
+                                modelfile.includes('vision') ||
+                                modelfile.includes('clip');
+
+            return capabilities;
+        } catch (error) {
+            console.error('Error fetching model capabilities:', error);
+            // Default to conservative capabilities if we can't determine
+            return {
+                vision: false
+            };
+        }
+    }
+
     static async generateResponse(prompt, model, options = {}) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -79,24 +126,23 @@ export class LocalModelService {
                 throw new Error('Ollama server is not running');
             }
 
-            // Check if model exists
-            const models = await this.getAvailableModels();
-            if (!models.some(m => m.name === model)) {
-                throw new Error(`Model ${model} not found`);
-            }
+            // Get model capabilities
+            const capabilities = await this.getModelCapabilities(model);
+            const hasImageInput = prompt.includes('<image>');
 
-            const isVisionModel = model.toLowerCase().includes('vision') || 
-                                model.toLowerCase().includes('dream') || 
-                                model.toLowerCase().includes('image');
+            // Check if trying to use image with non-vision model
+            if (hasImageInput && !capabilities.vision) {
+                throw new Error(`Model ${model} does not support image input. Please use a vision-capable model.`);
+            }
 
             console.log('Model request details:', {
                 model,
-                isVisionModel,
-                hasImage: prompt.includes('<image>'),
+                capabilities,
+                hasImage: hasImageInput,
                 promptLength: prompt.length
             });
 
-            if (isVisionModel && prompt.includes('<image>')) {
+            if (capabilities.vision && hasImageInput) {
                 return this.handleVisionRequest(prompt, model);
             } else {
                 return this.handleTextRequest(prompt, model, options);

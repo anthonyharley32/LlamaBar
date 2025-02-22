@@ -1030,21 +1030,25 @@ button:disabled {
 
 /* Math Styles */
 .katex-display {
-    margin: 1em 0;
+    margin: 1.5em 0;
     overflow-x: auto;
     overflow-y: hidden;
-    padding-top: 0.2em;
-    padding-bottom: 0.2em;
+    padding: 1em 0;
+    background: rgba(247, 247, 248, 0.7);
+    border-radius: 8px;
+    text-align: center;
 }
 
 .katex {
-    font-size: 1.1em;
+    font-size: 1.2em;
+    line-height: 1.4;
 }
 
 .content-container .katex-display > .katex {
     display: flex;
     justify-content: center;
     width: 100%;
+    padding: 0 1em;
 }
 
 .content-container .katex-display > .katex > .katex-html {
@@ -1058,4 +1062,61 @@ button:disabled {
 .content-container p .katex {
     font-size: 1.1em;
     vertical-align: -0.1em;
+}
+
+/* Ensure display math is properly centered and scaled */
+.katex-display > .katex > .katex-html > .tag {
+    position: relative;
+    right: 0;
+}
+
+/* Add some breathing room around display math in messages */
+.assistant-message .katex-display {
+    margin: 1em -0.5em;
+    padding: 1.2em 0.5em;
+}
+
+/* Improve scrolling for long equations */
+.katex-display .katex-html {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+.katex-display .katex-html::-webkit-scrollbar {
+    height: 4px;
+}
+
+.katex-display .katex-html::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.katex-display .katex-html::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 2px;
+}
+
+/* Ensure proper spacing between consecutive math displays */
+.katex-display + .katex-display {
+    margin-top: -0.5em;
+}
+
+/* Improve visibility of math symbols */
+.katex .mord, .katex .mbin, .katex .mrel, .katex .mopen, .katex .mclose {
+    color: #1a1a1a;
+}
+
+/* Better integration with dark backgrounds */
+.user-message .katex-display {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.user-message .katex .mord,
+.user-message .katex .mbin,
+.user-message .katex .mrel,
+.user-message .katex .mopen,
+.user-message .katex .mclose {
+    color: white;
 } 

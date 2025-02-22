@@ -7,7 +7,17 @@ export class ExternalModelService {
         if (!handler) {
             throw new Error(`Unsupported provider: ${provider}`);
         }
-        return handler(modelId, prompt, options);
+
+        // Check model capabilities
+        const capabilities = await this.getModelCapabilities(provider, modelId);
+        const hasImageInput = prompt.includes('<image>');
+
+        // Check if trying to use image with non-vision model
+        if (hasImageInput && !capabilities.vision) {
+            throw new Error(`Model ${modelId} does not support image input. Please use a vision-capable model.`);
+        }
+
+        return handler(modelId, prompt, { ...options, capabilities });
     }
 
     static getProviderHandler(provider) {
@@ -576,6 +586,83 @@ export class ExternalModelService {
         } catch (error) {
             console.error('💥 Error in handleGrok:', error);
             throw error;
+        }
+    }
+
+    static async getModelCapabilities(provider, modelId) {
+        try {
+            switch (provider) {
+                case 'openai':
+                    const response = await fetch('https://api.openai.com/v1/models', {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${await ApiKeyManager.getApiKey('openai')}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch OpenAI model capabilities');
+                    }
+                    
+                    const data = await response.json();
+                    const model = data.data.find(m => m.id === modelId);
+                    
+                    return {
+                        vision: model?.capabilities?.vision || false
+                    };
+
+                case 'anthropic':
+                    // Claude 3 models support vision
+                    return {
+                        vision: modelId.includes('claude-3')
+                    };
+
+                case 'gemini':
+                    // Gemini models with 'vision' in ID support vision
+                    return {
+                        vision: modelId.includes('vision')
+                    };
+
+                case 'grok':
+                    // Grok vision models explicitly named
+                    return {
+                        vision: modelId === 'grok-2-vision-1212'
+                    };
+
+                case 'openrouter':
+                    const orResponse = await fetch('https://openrouter.ai/api/v1/models', {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${await ApiKeyManager.getApiKey('openrouter')}`,
+                            'Content-Type': 'application/json',
+                            'HTTP-Referer': chrome.runtime.getURL(''),
+                            'X-Title': 'LlamaBar'
+                        }
+                    });
+
+                    if (!orResponse.ok) {
+                        throw new Error('Failed to fetch OpenRouter model capabilities');
+                    }
+
+                    const orData = await orResponse.json();
+                    const orModel = orData.data.find(m => m.id === modelId);
+
+                    return {
+                        vision: orModel?.capabilities?.vision || false
+                    };
+
+                default:
+                    return {
+                        vision: false
+                    };
+            }
+        } catch (error) {
+            console.error(`Error fetching ${provider} model capabilities:`, error);
+            // Default to conservative capabilities if we can't determine
+            return {
+                vision: false
+            };
         }
     }
 } 
