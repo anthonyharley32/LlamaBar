@@ -642,7 +642,13 @@ try {
             newSelectItems.innerHTML = '';
             
             let hasAnyModels = false;  // Track if we find any models
-            let hasSelectedModel = false;  // Track if we've found the current model
+            let hasSelectedModel = false;
+
+            // Get default model if available
+            const defaultModel = await ApiKeyManager.getDefaultModel();
+            if (defaultModel) {
+                currentModel = defaultModel;
+            }
             
             // Get local models from Ollama
             try {
@@ -1657,6 +1663,17 @@ Let's break this down:`;
                     </button>
                 </div>
                 <div class="model-editor-body">
+                    <div class="default-model-section">
+                        <h3>Default Model</h3>
+                        <select class="default-model-select">
+                            <option value="">Select a default model</option>
+                            ${activeProviders.map(({ provider, availableModels }) => 
+                                availableModels.map(model => `
+                                    <option value="${provider}:${model.id}">${provider.charAt(0).toUpperCase() + provider.slice(1)} - ${model.name}</option>
+                                `).join('')
+                            ).join('')}
+                        </select>
+                    </div>
                     ${activeProviders.map(({ provider, enabledModels, availableModels }) => {
                         if (provider === 'openrouter') {
                             return `
@@ -1901,6 +1918,69 @@ Let's break this down:`;
                 const checked = list.querySelectorAll('input[type="checkbox"]:checked').length;
                 countSpan.textContent = `${checked} of ${total} enabled`;
             });
+        });
+
+        // Add default model handler
+        const defaultModelSelect = modelEditor.querySelector('.default-model-select');
+        const currentDefaultModel = await ApiKeyManager.getDefaultModel();
+        if (currentDefaultModel) {
+            defaultModelSelect.value = currentDefaultModel;
+        }
+
+        defaultModelSelect.addEventListener('change', async () => {
+            const selectedModel = defaultModelSelect.value;
+            if (selectedModel) {
+                await ApiKeyManager.saveDefaultModel(selectedModel);
+                showToast('Default model updated successfully!');
+            }
+        });
+
+        // Add styles for default model section
+        const defaultModelStyles = document.createElement('style');
+        defaultModelStyles.textContent = `
+            .default-model-section {
+                padding: 16px;
+                border-bottom: 1px solid var(--border-color);
+                margin-bottom: 16px;
+            }
+
+            .default-model-section h3 {
+                margin: 0 0 12px 0;
+                font-size: 16px;
+                font-weight: 500;
+                color: var(--text-color);
+            }
+
+            .default-model-select {
+                width: 100%;
+                padding: 8px 12px;
+                border: 1px solid var(--border-color);
+                border-radius: 6px;
+                background: var(--background-color);
+                color: var(--text-color);
+                font-size: 14px;
+                cursor: pointer;
+                transition: border-color 0.2s;
+            }
+
+            .default-model-select:hover {
+                border-color: var(--primary-color);
+            }
+
+            .default-model-select:focus {
+                outline: none;
+                border-color: var(--primary-color);
+            }
+
+            .default-model-select option {
+                padding: 8px;
+            }
+        `;
+        document.head.appendChild(defaultModelStyles);
+
+        // Add animation class after a small delay to trigger transition
+        requestAnimationFrame(() => {
+            modelEditor.classList.add('show');
         });
     }
 

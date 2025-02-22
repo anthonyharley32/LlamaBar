@@ -116,4 +116,13 @@ export class ApiKeyManager {
     static async clearEnabledModels(provider) {
         await chrome.storage.local.remove(`enabledModels_${provider}`);
     }
+
+    static async saveDefaultModel(modelId) {
+        await chrome.storage.local.set({ defaultModel: modelId });
+    }
+
+    static async getDefaultModel() {
+        const result = await chrome.storage.local.get('defaultModel');
+        return result.defaultModel || null;
+    }
 } 
