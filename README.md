@@ -11,6 +11,17 @@ A Chrome extension that provides a local AI assistant powered by Ollama, running
 - 🔍 Text selection support for quick queries
 - 🎯 Explain and translate functionality
 
+## Install with Chrome
+
+We're still wating on Chrome store approval though it's coming soon. For Alpha testing:
+
+1.  Download the zip file
+2.  Unzip
+3.  Go to chrome://extensions/ in your browser
+4.  Check "Developer Mode" in the top right
+5.  Press "Load unpacked" in the top left
+6.  Select unzipped folder
+
 ## Prerequisites
 
 1. Install [Ollama](https://ollama.ai)
