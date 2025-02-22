@@ -1930,6 +1930,30 @@ Let's break this down:`;
         defaultModelSelect.addEventListener('change', async () => {
             const selectedModel = defaultModelSelect.value;
             if (selectedModel) {
+                const [provider, modelId] = selectedModel.split(':');
+                
+                // Get current enabled models for the provider
+                const enabledModels = await ApiKeyManager.getEnabledModels(provider) || [];
+                
+                // If the model isn't enabled, enable it
+                if (!enabledModels.includes(modelId)) {
+                    enabledModels.push(modelId);
+                    await ApiKeyManager.saveEnabledModels(provider, enabledModels);
+                    
+                    // Update the checkbox in the UI
+                    const checkbox = modelEditor.querySelector(`input[data-provider="${provider}"][data-model="${modelId}"]`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                        
+                        // Update the model count
+                        const modelList = checkbox.closest('.model-list');
+                        const countSpan = modelList.closest('.provider-models').querySelector('.model-count');
+                        const total = modelList.querySelectorAll('input[type="checkbox"]').length;
+                        const checked = modelList.querySelectorAll('input[type="checkbox"]:checked').length;
+                        countSpan.textContent = `${checked} of ${total} enabled`;
+                    }
+                }
+                
                 await ApiKeyManager.saveDefaultModel(selectedModel);
                 showToast('Default model updated successfully!');
             }

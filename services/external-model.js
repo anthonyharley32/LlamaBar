@@ -372,6 +372,7 @@ export class ExternalModelService {
                                 success: true,
                                 delta: { content },
                                 response: accumulatedContent,
+                                contentLength: accumulatedContent.length,
                                 done: false
                             };
                         }
