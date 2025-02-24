@@ -2,6 +2,13 @@
 
 A Chrome extension that provides a local AI assistant powered by Ollama, running completely locally on your machine. It adds a convenient sidebar interface for interacting with local LLMs through Ollama.
 
+<div align="center">
+  <a href="https://x.com/anthony_harley1/status/1892079890611962153" style="position: relative; display: inline-block;">
+    <img src="https://github.com/user-attachments/assets/0e3a6acc-d11e-4e82-afbd-6df53d072f8d" width="500" alt="LlamaBar Demo">
+  </a>
+  <p>Demo on X^^</p>
+</div>
+
 ## Features
 
 - 🤖 Local AI assistant powered by Ollama
