@@ -466,6 +466,8 @@
             color: var(--primary-hover);
         }
     </style>
+    <!-- Load theme-loader.js before any other scripts -->
+    <script src="../utils/theme-loader.js"></script>
 </head>
 <body>
     <div class="wizard-container">
@@ -676,78 +678,6 @@
     </div>
 
     <script src="../utils/setup-wizard.js"></script>
-    <script>
-        // Detect OS and show appropriate instructions
-        const userAgent = navigator.userAgent;
-        let osClass = '';
-        
-        if (userAgent.indexOf('Mac') !== -1) {
-            osClass = 'os-mac';
-            document.querySelector('.mac-only')?.classList.add('active');
-        } else if (userAgent.indexOf('Windows') !== -1) {
-            osClass = 'os-windows';
-            document.querySelector('.windows-only')?.classList.add('active');
-        } else if (userAgent.indexOf('Linux') !== -1) {
-            osClass = 'os-linux';
-            document.querySelector('.linux-only')?.classList.add('active');
-        }
-        
-        document.body.classList.add(osClass);
-        
-        // Setup step collapsing
-        document.querySelectorAll('.setup-step-header').forEach(header => {
-            header.addEventListener('click', () => {
-                const step = header.closest('.setup-step');
-                step.classList.toggle('collapsed');
-            });
-        });
-        
-        // Show all options button
-        const showAllButton = document.getElementById('showAllOptions');
-        if (showAllButton) {
-            showAllButton.style.display = 'inline-block';
-            showAllButton.addEventListener('click', () => {
-                document.querySelectorAll('.install-option').forEach(option => {
-                    option.style.display = 'block';
-                });
-                showAllButton.style.display = 'none';
-            });
-        }
-
-        // Dark mode detection and application
-        function applyTheme() {
-            try {
-                // Check if parent window has dark theme
-                const parentHasDarkTheme = window.parent.document.body.classList.contains('dark-theme');
-                
-                // Apply theme to this document
-                if (parentHasDarkTheme) {
-                    document.body.classList.add('dark-theme');
-                } else {
-                    document.body.classList.remove('dark-theme');
-                }
-            } catch (error) {
-                console.error('Error applying theme:', error);
-                
-                // Fallback to system preference if parent window access fails
-                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                    document.body.classList.add('dark-theme');
-                }
-            }
-        }
-
-        // Apply theme on load
-        document.addEventListener('DOMContentLoaded', applyTheme);
-        
-        // Listen for theme changes in parent window
-        window.addEventListener('message', (event) => {
-            if (event.data && event.data.type === 'THEME_CHANGED') {
-                applyTheme();
-            }
-        });
-
-        // Check theme periodically in case we missed the change event
-        setInterval(applyTheme, 1000);
-    </script>
+    <script src="../utils/os-detector.js"></script>
 </body>
 </html> 

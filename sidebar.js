@@ -173,7 +173,9 @@ try {
         }
         
         setupWizardFrame = document.createElement('iframe');
-        setupWizardFrame.src = chrome.runtime.getURL('components/setup-wizard.html');
+        // Check if dark theme is active and pass it as a parameter
+        const isDarkTheme = document.body.classList.contains('dark-theme');
+        setupWizardFrame.src = chrome.runtime.getURL(`components/setup-wizard.html?theme=${isDarkTheme ? 'dark' : 'light'}`);
         setupWizardFrame.style.cssText = `
             position: fixed;
             top: 0;
@@ -181,7 +183,7 @@ try {
             width: 100%;
             height: 100%;
             border: none;
-            background: white;
+            background: transparent;
             z-index: 1000;
         `;
         document.body.appendChild(setupWizardFrame);
@@ -2214,12 +2216,12 @@ Let's break this down:`;
 
         .model-editor-content {
             position: relative;
-            background: white;
+            background: var(--background-color);
             border-radius: 12px;
             max-width: 600px;
             width: 90%;
             max-height: 90vh;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 8px 32px var(--shadow-color);
             display: flex;
             flex-direction: column;
             transform: scale(0.95);
@@ -2237,14 +2239,14 @@ Let's break this down:`;
             align-items: center;
             justify-content: space-between;
             padding: 20px 24px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--border-color);
         }
 
         .model-editor-header h2 {
             margin: 0;
             font-size: 20px;
             font-weight: 600;
-            color: #1a1a1a;
+            color: var(--text-color);
         }
 
         .model-editor-body {
@@ -2255,7 +2257,7 @@ Let's break this down:`;
 
         .provider-models {
             margin-bottom: 32px;
-            background: white;
+            background: var(--card-bg);
             border-radius: 12px;
             overflow: hidden;
         }
@@ -2268,8 +2270,8 @@ Let's break this down:`;
             display: flex;
             align-items: center;
             padding: 16px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #eee;
+            background: var(--step-bg-color);
+            border-bottom: 1px solid var(--border-color);
             margin-bottom: 0;
         }
 
@@ -2284,13 +2286,13 @@ Let's break this down:`;
             margin: 0;
             font-size: 16px;
             font-weight: 600;
-            color: #1a1a1a;
+            color: var(--text-color);
         }
 
         .model-count {
             margin-left: auto;
             font-size: 14px;
-            color: #666;
+            color: var(--secondary-text-color);
         }
 
         .model-list {
@@ -2307,7 +2309,7 @@ Let's break this down:`;
             justify-content: flex-start;
             padding: 12px;
             border-radius: 8px;
-            background: #f8f9fa;
+            background: var(--step-bg-color);
             transition: all 0.2s ease;
             gap: 12px;
             cursor: pointer;
@@ -2315,13 +2317,13 @@ Let's break this down:`;
         }
 
         .model-option:hover {
-            background: #f0f1f2;
-            border-color: #e0e0e0;
+            background: var(--hover-color);
+            border-color: var(--border-color);
         }
 
         .model-option.selected {
-            background: #e8f0fe;
-            border-color: #4285f4;
+            background: rgba(33, 150, 243, 0.1);
+            border-color: var(--primary-color);
         }
 
         .checkbox-wrapper {
@@ -2340,15 +2342,15 @@ Let's break this down:`;
             display: block;
             width: 18px;
             height: 18px;
-            border: 2px solid #ddd;
+            border: 2px solid var(--border-color);
             border-radius: 4px;
-            background: white;
+            background: var(--background-color);
             transition: all 0.2s ease;
         }
 
         .checkbox-wrapper input[type="checkbox"]:checked + .checkbox-custom {
-            background: #4285f4;
-            border-color: #4285f4;
+            background: var(--primary-color);
+            border-color: var(--primary-color);
         }
 
         .checkbox-custom::after {
@@ -2380,13 +2382,13 @@ Let's break this down:`;
         .model-name {
             font-size: 14px;
             font-weight: 500;
-            color: #1a1a1a;
+            color: var(--text-color);
             text-align: left;
         }
 
         .model-id {
             font-size: 12px;
-            color: #666;
+            color: var(--secondary-text-color);
             margin-top: 2px;
             text-align: left;
         }
@@ -2398,7 +2400,7 @@ Let's break this down:`;
             padding: 4px;
             background: none;
             border: none;
-            color: #666;
+            color: var(--secondary-text-color);
             cursor: pointer;
             transition: color 0.2s ease;
             opacity: 0;
@@ -2406,7 +2408,7 @@ Let's break this down:`;
         }
 
         .model-option:hover {
-            background: #f0f1f2;
+            background: var(--hover-color);
         }
 
         .model-option:hover .remove-model-button {
@@ -2422,7 +2424,7 @@ Let's break this down:`;
             justify-content: flex-end;
             gap: 12px;
             padding: 20px 24px;
-            border-top: 1px solid #eee;
+            border-top: 1px solid var(--border-color);
         }
 
         .primary-button,
@@ -2436,13 +2438,13 @@ Let's break this down:`;
         }
 
         .primary-button {
-            background: #007AFF;
+            background: var(--primary-color);
             color: white;
             border: none;
         }
 
         .primary-button:hover {
-            background: #0066CC;
+            background: var(--primary-hover);
         }
 
         .primary-button:disabled {
@@ -2451,13 +2453,13 @@ Let's break this down:`;
         }
 
         .secondary-button {
-            background: #f8f9fa;
-            color: #1a1a1a;
-            border: 1px solid #ddd;
+            background: var(--step-bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
         }
 
         .secondary-button:hover {
-            background: #f0f1f2;
+            background: var(--hover-color);
         }
 
         .close-editor {
@@ -2465,12 +2467,12 @@ Let's break this down:`;
             border: none;
             padding: 4px;
             cursor: pointer;
-            color: #666;
+            color: var(--secondary-text-color);
             transition: color 0.2s ease;
         }
 
         .close-editor:hover {
-            color: #1a1a1a;
+            color: var(--text-color);
         }
 
         .button-content {
@@ -2512,15 +2514,17 @@ Let's break this down:`;
         .add-model-input {
             flex: 1;
             padding: 8px 12px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color);
             border-radius: 6px;
             font-size: 14px;
+            background: var(--background-color);
+            color: var(--text-color);
             transition: border-color 0.2s ease;
         }
 
         .add-model-input:focus {
             outline: none;
-            border-color: #007AFF;
+            border-color: var(--primary-color);
         }
 
         .add-model-button {
@@ -2528,7 +2532,7 @@ Let's break this down:`;
             align-items: center;
             gap: 6px;
             padding: 8px 12px;
-            background: #007AFF;
+            background: var(--primary-color);
             color: white;
             border: none;
             border-radius: 6px;
@@ -2544,17 +2548,17 @@ Let's break this down:`;
         }
 
         .add-model-button:not(:disabled):hover {
-            background: #0066CC;
+            background: var(--primary-hover);
         }
 
         .model-validation-message {
             font-size: 13px;
-            color: #666;
+            color: var(--secondary-text-color);
             min-height: 20px;
         }
 
         .model-validation-message.loading {
-            color: #666;
+            color: var(--secondary-text-color);
         }
 
         .model-validation-message.success {

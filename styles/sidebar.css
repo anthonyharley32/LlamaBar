@@ -1245,8 +1245,23 @@ body.dark-theme .select-items {
     box-shadow: 0 4px 6px var(--shadow-color);
 }
 
+body.dark-theme .model-option {
+    background-color: var(--message-bg);
+    color: var(--text-color);
+}
+
 body.dark-theme .model-option:hover {
     background: var(--hover-color);
+}
+
+body.dark-theme .provider-header {
+    background: var(--message-bg);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+body.dark-theme .provider-section {
+    border-color: var(--border-color);
 }
 
 body.dark-theme .settings-menu {
