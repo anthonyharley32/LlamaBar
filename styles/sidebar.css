@@ -7,6 +7,20 @@
     --hover-color: #f3f4f6;
     --message-bg: #f9fafb;
     --shadow-color: rgba(0, 0, 0, 0.1);
+    
+    /* Transition for smooth theme switching */
+    --transition-duration: 0.3s;
+}
+
+/* Dark theme variables */
+body.dark-theme {
+    --primary-color: #2196F3; /* Keep the same blue */
+    --background-color: #121212;
+    --text-color: #e0e0e0;
+    --border-color: #333333;
+    --hover-color: #2a2a2a;
+    --message-bg: #262626;
+    --shadow-color: rgba(0, 0, 0, 0.7);
 }
 
 * {
@@ -21,6 +35,7 @@ body {
     color: var(--text-color);
     background: var(--background-color);
     overflow: hidden;
+    transition: background-color var(--transition-duration) ease, color var(--transition-duration) ease;
 }
 
 /* Sidebar Container */
@@ -51,19 +66,6 @@ body {
     gap: 8px;
 }
 
-.markdown-toggle {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-left: auto;
-}
-
-.toggle-label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-color);
-}
-
 /* Toggle Switch */
 .switch {
     position: relative;
@@ -76,6 +78,12 @@ body {
     opacity: 0;
     width: 0;
     height: 0;
+}
+
+.toggle-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-color);
 }
 
 .slider {
@@ -578,10 +586,20 @@ input:checked + .slider:before {
     background: #f1f3f5;
 }
 
+/* Dark mode styles for explain button */
+body.dark-theme .explain-button {
+    background: var(--hover-color);
+    color: var(--text-color);
+}
+
+body.dark-theme .explain-button:hover {
+    background: #3a3a3a;
+}
+
 .input-wrapper {
     display: flex;
     flex-direction: column;
-    background: #f8f9fa;
+    background: var(--hover-color);
     border-radius: 16px;
     padding: 12px 16px;
     transition: background-color 0.2s ease;
@@ -605,7 +623,8 @@ textarea {
     min-height: 44px;
     max-height: 200px;
     border: none;
-    background: none;
+    background: transparent;
+    color: var(--text-color);
     resize: none;
     padding: 8px 0;
     font-family: inherit;
@@ -752,13 +771,13 @@ textarea {
 .welcome-message h2 {
     font-size: 32px;
     font-weight: 600;
-    color: #1f2937;
+    color: var(--text-color);
     margin-bottom: 8px;
 }
 
-.welcome-message p {
+.welcome-message p, .welcome-text {
     font-size: 16px;
-    color: #1f2937;
+    color: var(--text-color);
     margin: 0;
 }
 
@@ -771,6 +790,7 @@ textarea {
 .settings-dropdown {
     position: relative;
     display: inline-block;
+    margin-left: auto;
 }
 
 .settings-button {
@@ -822,6 +842,31 @@ textarea {
 
 .settings-item:hover {
     background: var(--hover-color);
+}
+
+.settings-divider {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 8px 0;
+}
+
+.settings-toggle-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 8px 16px;
+    color: var(--text-color);
+    font-size: 14px;
+}
+
+.settings-toggle-item .toggle-label {
+    font-size: 14px;
+    font-weight: normal;
+}
+
+.settings-toggle-item .switch {
+    margin-left: auto;
 }
 
 .chevron-icon {
@@ -902,6 +947,10 @@ textarea {
     margin-top: 4px;
 }
 
+body.dark-theme .api-key-input {
+    background: var(--hover-color);
+}
+
 .api-key-input.show {
     display: block;
 }
@@ -913,6 +962,12 @@ textarea {
     border-radius: 4px;
     margin-bottom: 8px;
     font-size: 13px;
+}
+
+body.dark-theme .api-key-input input {
+    background: var(--background-color);
+    color: var(--text-color);
+    border-color: var(--border-color);
 }
 
 .key-actions {
@@ -977,7 +1032,11 @@ button:disabled {
 }
 
 .provider-info:hover {
-    background: #f5f5f5;
+    background-color: #f5f5f5;
+}
+
+body.dark-theme .provider-info:hover {
+    background-color: var(--hover-color);
 }
 
 .provider-info img {
@@ -1127,4 +1186,82 @@ button:disabled {
 .user-message .katex .mopen,
 .user-message .katex .mclose {
     color: white;
+}
+
+/* Dark mode specific overrides */
+body.dark-theme .content-container code {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+}
+
+body.dark-theme .content-container pre {
+    background-color: #1e1e1e;
+    border: 1px solid #333333;
+}
+
+body.dark-theme .content-container pre code {
+    background-color: transparent;
+}
+
+body.dark-theme .content-container blockquote {
+    background-color: #1a1a1a;
+    border-left-color: #444444;
+}
+
+body.dark-theme .content-container table {
+    border-color: #333333;
+}
+
+body.dark-theme .content-container th,
+body.dark-theme .content-container td {
+    border-color: #333333;
+}
+
+body.dark-theme ::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+body.dark-theme ::-webkit-scrollbar-thumb {
+    background: #444444;
+}
+
+body.dark-theme ::-webkit-scrollbar-thumb:hover {
+    background: #555555;
+}
+
+body.dark-theme .user-message {
+    background: var(--primary-color);
+    color: white;
+}
+
+body.dark-theme .assistant-message {
+    background: var(--message-bg);
+    color: var(--text-color);
+}
+
+body.dark-theme .select-items {
+    background: var(--background-color);
+    border-color: var(--border-color);
+    box-shadow: 0 4px 6px var(--shadow-color);
+}
+
+body.dark-theme .model-option:hover {
+    background: var(--hover-color);
+}
+
+body.dark-theme .settings-menu {
+    background: var(--background-color);
+    border-color: var(--border-color);
+    box-shadow: 0 4px 6px var(--shadow-color);
+}
+
+body.dark-theme .api-key-dropdown {
+    background: var(--background-color);
+    border-color: var(--border-color);
+}
+
+body.dark-theme .api-key-input input {
+    background: var(--background-color);
+    color: var(--text-color);
+    border-color: var(--border-color);
 } 

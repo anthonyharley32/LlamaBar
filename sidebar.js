@@ -94,6 +94,7 @@ try {
     const explainButtonContainer = document.getElementById('explain-button-container');
     const inputExplainButton = document.getElementById('input-explain-button');
     const markdownToggle = document.getElementById('markdown-toggle');
+    const themeToggle = document.getElementById('theme-toggle');
 
     console.log('📦 DOM elements initialized:', {
         hasChatMessages: !!chatMessages,
@@ -2725,6 +2726,61 @@ Let's break this down:`;
             }
         }
     });
+
+    // Theme toggle functionality
+    function initializeThemeToggle() {
+        logInfo('THEME', 'Initializing theme toggle');
+        
+        // Check for saved theme preference or use system preference
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        
+        // Set initial theme based on saved preference or system preference
+        if (savedTheme === 'dark' || (savedTheme === null && prefersDarkScheme)) {
+            document.body.classList.add('dark-theme');
+            themeToggle.checked = true;
+        }
+        
+        // Add event listener for theme toggle
+        themeToggle.addEventListener('change', function() {
+            if (this.checked) {
+                document.body.classList.add('dark-theme');
+                localStorage.setItem('theme', 'dark');
+                logInfo('THEME', 'Switched to dark theme');
+            } else {
+                document.body.classList.remove('dark-theme');
+                localStorage.setItem('theme', 'light');
+                logInfo('THEME', 'Switched to light theme');
+            }
+        });
+        
+        // Listen for system theme changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            if (localStorage.getItem('theme') === null) {
+                if (e.matches) {
+                    document.body.classList.add('dark-theme');
+                    themeToggle.checked = true;
+                    logInfo('THEME', 'System switched to dark theme');
+                } else {
+                    document.body.classList.remove('dark-theme');
+                    themeToggle.checked = false;
+                    logInfo('THEME', 'System switched to light theme');
+                }
+            }
+        });
+    }
+
+    // Initialize components
+    try {
+        // Initialize theme toggle
+        initializeThemeToggle();
+        
+        // Initialize model selector
+        initializeModelSelector();
+    } catch (error) {
+        console.error('Error initializing components:', error);
+        showToast('Failed to initialize components', 'error');
+    }
 } catch (error) {
     console.error('❌ Initialization error:', error);
 } 
