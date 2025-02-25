@@ -782,8 +782,22 @@ textarea {
 }
 
 /* Hide welcome message when chat has messages */
-.chat-container .message ~ .welcome-message {
-    display: none;
+.chat-container .welcome-message {
+    display: block;
+    transition: opacity 0.5s ease-out, visibility 0s 0.5s;
+}
+
+/* Blend out welcome-message when message send */
+.chat-container.message-sent .welcome-message {
+    opacity: 0;
+    visibility: hidden;
+}
+
+/* Style for welcome message */
+.welcome-message {
+    font-size: 18px;
+    color: #333;
+    margin-bottom: 20px;
 }
 
 /* Settings Dropdown */

@@ -125,6 +125,12 @@ try {
         return localPrefixes.some(prefix => modelNameWithoutPrefix.toLowerCase().startsWith(prefix.toLowerCase()));
     }
 
+    // Fade welcome-message
+    document.getElementById("send-button").addEventListener("click", function() {
+        // add class "message-sent" to hide the welcome message
+        document.querySelector(".chat-container").classList.add("message-sent");
+    });
+
     // Check setup status
     async function checkSetupStatus() {
         try {
