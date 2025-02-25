@@ -2,6 +2,100 @@ let currentStep = 1;
 let connectionAttempts = 0;
 const MAX_ATTEMPTS = 3;
 
+// Detect user's operating system
+function detectOS() {
+    const platform = navigator.platform.toLowerCase();
+    
+    if (platform.includes('mac') || platform.includes('darwin')) {
+        return 'mac';
+    } else if (platform.includes('win')) {
+        return 'windows';
+    } else if (platform.includes('linux') || platform.includes('x11')) {
+        return 'linux';
+    } else {
+        return 'unknown';
+    }
+}
+
+// Show only relevant OS installation instructions
+function showRelevantOSInstructions() {
+    const userOS = detectOS();
+    
+    // Handle installation options
+    const installOptions = document.querySelectorAll('.install-option');
+    installOptions.forEach(option => {
+        if (option.classList.contains(userOS) || option.classList.contains('all-os')) {
+            option.style.display = 'block';
+        } else {
+            option.style.display = 'none';
+        }
+    });
+    
+    // Handle start instructions
+    const startInstructions = document.querySelectorAll('.os-specific-instructions');
+    startInstructions.forEach(instruction => {
+        if (instruction.classList.contains(userOS) || instruction.classList.contains('all-os')) {
+            instruction.style.display = 'block';
+        } else {
+            instruction.style.display = 'none';
+        }
+    });
+    
+    // Show "Show all options" button if we detected a specific OS
+    const showAllButton = document.getElementById('showAllOptions');
+    if (showAllButton) {
+        if (userOS !== 'unknown') {
+            showAllButton.style.display = 'block';
+        } else {
+            showAllButton.style.display = 'none';
+        }
+    }
+    
+    // Add OS class to body for potential CSS targeting
+    document.body.classList.add('os-' + userOS);
+}
+
+// Toggle showing all OS options
+function toggleAllOSOptions() {
+    const installOptions = document.querySelectorAll('.install-option');
+    const startInstructions = document.querySelectorAll('.os-specific-instructions');
+    const showAllButton = document.getElementById('showAllOptions');
+    
+    if (showAllButton.textContent.includes('Show all')) {
+        // Show all options
+        installOptions.forEach(option => {
+            option.style.display = 'block';
+        });
+        
+        // For start instructions, we still only show one set to avoid confusion
+        // But we add a note that there are different instructions for different OS
+        const osNote = document.createElement('p');
+        osNote.className = 'note os-note';
+        osNote.textContent = 'Note: Instructions may vary depending on your operating system.';
+        
+        const existingNote = document.querySelector('.os-note');
+        if (!existingNote) {
+            const firstVisibleInstructions = startInstructions[0];
+            if (firstVisibleInstructions && firstVisibleInstructions.parentNode) {
+                firstVisibleInstructions.parentNode.insertBefore(osNote, firstVisibleInstructions);
+            }
+        }
+        
+        showAllButton.textContent = 'Show only my OS';
+    } else {
+        // Show only relevant OS
+        showRelevantOSInstructions();
+        
+        // Remove the OS note
+        const osNote = document.querySelector('.os-note');
+        if (osNote) {
+            osNote.remove();
+        }
+        
+        showAllButton.textContent = 'Show all options';
+    }
+}
+
 // Step navigation
 function showStep(step) {
     document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
@@ -9,120 +103,24 @@ function showStep(step) {
     currentStep = step;
 }
 
-// Copy command to clipboard
-async function copyCommand(command) {
-    const button = event.target;
-    
-    try {
-        // Try using the Clipboard API first
-        if (navigator.clipboard && window.isSecureContext) {
-            await navigator.clipboard.writeText(command);
-        } else {
-            // Fallback for non-secure contexts or when Clipboard API is not available
-            const textArea = document.createElement('textarea');
-            textArea.value = command;
-            textArea.style.position = 'fixed';
-            textArea.style.left = '-999999px';
-            textArea.style.top = '-999999px';
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            
-            try {
-                document.execCommand('copy');
-                textArea.remove();
-            } catch (err) {
-                console.error('Fallback: Oops, unable to copy', err);
-                textArea.remove();
-                throw new Error('Copy failed');
-            }
-        }
-        
-        // Success feedback
-        button.textContent = 'Copied!';
-        button.classList.add('copy-success');
-        
-        setTimeout(() => {
-            button.textContent = 'Copy';
-            button.classList.remove('copy-success');
-        }, 2000);
-    } catch (err) {
-        console.error('Copy failed:', err);
-        button.textContent = 'Failed';
-        button.classList.add('copy-error');
-        
-        setTimeout(() => {
-            button.textContent = 'Copy';
-            button.classList.remove('copy-error');
-        }, 2000);
-    }
+// Toggle setup step collapse/expand
+function toggleSetupStep(element) {
+    element.classList.toggle('collapsed');
 }
 
-// Check Ollama connection
-async function checkOllamaConnection() {
-    const statusEl = document.getElementById('ollamaStatus');
-    const terminalInstructions = document.getElementById('terminalInstructions');
-    const nextButton = document.getElementById('nextStep1');
-    statusEl.className = 'status-indicator pending';
-    statusEl.textContent = 'Checking Ollama connection...';
-    
-    try {
-        // Try to connect multiple times with a delay
-        for (connectionAttempts = 0; connectionAttempts < MAX_ATTEMPTS; connectionAttempts++) {
-            try {
-                const response = await fetch('http://localhost:11434/api/version');
-                if (response.status === 403) {
-                    // Immediately handle CORS error
-                    throw new Error('CORS not configured. Ollama needs to be started with CORS settings.');
-                }
-                
-                if (response.ok) {
-                    const version = await response.json();
-                    
-                    // Check if CORS is properly configured
-                    const modelResponse = await fetch('http://localhost:11434/api/tags');
-                    if (modelResponse.status === 403) {
-                        throw new Error('CORS not configured. Ollama needs to be started with CORS settings.');
-                    }
-                    
-                    if (modelResponse.ok) {
-                        statusEl.className = 'status-indicator success';
-                        statusEl.textContent = `Successfully connected to Ollama ${version.version}!`;
-                        nextButton.disabled = false;
-                        nextButton.classList.remove('disabled');
-                        terminalInstructions.style.display = 'none';
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.error('Connection attempt failed:', e);
-                if (e.message.includes('CORS')) {
-                    // Immediately show terminal instructions for CORS errors
-                    statusEl.className = 'status-indicator error';
-                    statusEl.textContent = 'Ollama is running but needs CORS settings. Please follow the instructions below.';
-                    nextButton.disabled = true;
-                    nextButton.classList.add('disabled');
-                    terminalInstructions.style.display = 'block';
-                    return;
-                }
-            }
+// Update step status
+function updateStepStatus(stepId, status) {
+    const stepElement = document.querySelector(`.setup-step[data-step="${stepId}"]`);
+    if (stepElement) {
+        const statusDot = stepElement.querySelector('.setup-step-status');
+        if (statusDot) {
+            statusDot.className = 'setup-step-status ' + status;
             
-            // Wait before next attempt
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // If this is the install step and status is success, collapse it
+            if (stepId === 'install' && status === 'success') {
+                stepElement.classList.add('collapsed');
+            }
         }
-        
-        // If we get here, all attempts failed
-        throw new Error('Could not connect to Ollama');
-        
-    } catch (error) {
-        console.error('Connection check failed:', error);
-        statusEl.className = 'status-indicator error';
-        statusEl.textContent = error.message.includes('CORS') 
-            ? 'Ollama is running but needs CORS settings. Please follow the instructions below.'
-            : 'Could not connect to Ollama. Please follow the instructions below.';
-        nextButton.disabled = true;
-        nextButton.classList.add('disabled');
-        terminalInstructions.style.display = 'block';
     }
 }
 
@@ -157,8 +155,12 @@ async function checkInstalledModels() {
     const statusEl = document.getElementById('modelStatus');
     const nextButton = document.getElementById('nextStep2');
     
+    statusEl.className = 'status-indicator pending';
+    statusEl.textContent = 'Checking for installed models...';
+    
     try {
         const response = await fetch('http://localhost:11434/api/tags');
+        
         if (response.ok) {
             const data = await response.json();
             if (data.models && data.models.length > 0) {
@@ -177,8 +179,10 @@ async function checkInstalledModels() {
         }
     } catch (error) {
         console.error('Model check failed:', error);
+        
         statusEl.className = 'status-indicator error';
         statusEl.textContent = 'Failed to check models. Please ensure Ollama is running.';
+        
         nextButton.disabled = true;
         return false;
     }
@@ -186,8 +190,46 @@ async function checkInstalledModels() {
 
 // Initialize the wizard
 function initWizard() {
-    // Add event listeners
-    document.getElementById('checkOllama').addEventListener('click', checkOllamaConnection);
+    // Add event listeners for collapsible steps
+    document.querySelectorAll('.setup-step-header').forEach(header => {
+        header.addEventListener('click', () => {
+            toggleSetupStep(header.closest('.setup-step'));
+        });
+    });
+    
+    // Add event listener for the checkbox
+    const ollamaServedCheckbox = document.getElementById('ollamaServedCheckbox');
+    const nextButton = document.getElementById('nextStep1');
+    
+    if (ollamaServedCheckbox) {
+        ollamaServedCheckbox.addEventListener('change', function() {
+            // Enable/disable the Next button based on checkbox state
+            nextButton.disabled = !this.checked;
+            
+            if (this.checked) {
+                // Update step status for install and collapse it
+                updateStepStatus('install', 'success');
+                
+                // Explicitly collapse the install step
+                const installStep = document.querySelector('.setup-step[data-step="install"]');
+                if (installStep) {
+                    installStep.classList.add('collapsed');
+                }
+                
+                // Remove disabled class from Next button
+                nextButton.classList.remove('disabled');
+            } else {
+                // Add disabled class to Next button
+                nextButton.classList.add('disabled');
+            }
+        });
+    }
+    
+    // Add event listener for "Show all options" button
+    const showAllButton = document.getElementById('showAllOptions');
+    if (showAllButton) {
+        showAllButton.addEventListener('click', toggleAllOSOptions);
+    }
     
     // Navigation buttons
     document.getElementById('nextStep1').addEventListener('click', () => {
@@ -195,15 +237,32 @@ function initWizard() {
         // Check for models when entering step 2
         checkInstalledModels();
     });
-    document.getElementById('prevStep2').addEventListener('click', () => showStep(1));
+    document.getElementById('prevStep2').addEventListener('click', () => {
+        showStep(1);
+    });
     document.getElementById('nextStep2').addEventListener('click', () => showStep(3));
     document.getElementById('prevStep3').addEventListener('click', () => showStep(2));
     document.getElementById('finish').addEventListener('click', () => {
         window.parent.postMessage({ type: 'SETUP_COMPLETE' }, '*');
     });
     
-    // Initial connection check
-    checkOllamaConnection();
+    // Set install step to success by default
+    updateStepStatus('install', 'success');
+    
+    // Collapse the install step since it's set to success by default
+    const installStep = document.querySelector('.setup-step[data-step="install"]');
+    if (installStep) {
+        installStep.classList.add('collapsed');
+    }
+    
+    // Always show CORS instructions
+    const terminalInstructions = document.getElementById('terminalInstructions');
+    if (terminalInstructions) {
+        terminalInstructions.style.display = 'block';
+    }
+    
+    // Show only relevant OS installation instructions
+    showRelevantOSInstructions();
 }
 
 // Poll for model status every 5 seconds when on step 2

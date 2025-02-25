@@ -3,6 +3,8 @@ console.log('🔍 Script tag loaded');
 // Move imports to top
 import { ApiKeyManager } from './utils/api-key-manager.js';
 import { ApiService } from './utils/api-service.js';
+import { LocalModelService } from './services/local-model.js';
+import { ExternalModelService } from './services/external-model.js';
 
 console.log('✅ Imports successful');
 console.log('🚀 Sidebar script starting...');
@@ -17,6 +19,64 @@ const logoMap = {
     'openrouter': 'openrouter.jpeg',
     'grok': 'grok.webp'
 };
+
+// Add log level system at the top after imports
+const LogLevel = {
+    ERROR: 0,
+    WARN: 1,
+    INFO: 2,
+    DEBUG: 3,
+    TRACE: 4  // For very detailed logs
+};
+
+// Set default log level to INFO, can be changed via localStorage
+const currentLogLevel = parseInt(localStorage.getItem('logLevel')) || LogLevel.INFO;
+
+// Enhanced logging function with categories
+function log(level, category, message, data = null) {
+    if (level <= currentLogLevel) {
+        const prefix = level === LogLevel.ERROR ? '❌' :
+                      level === LogLevel.WARN ? '⚠️' :
+                      level === LogLevel.INFO ? 'ℹ️' :
+                      level === LogLevel.DEBUG ? '🔍' :
+                      level === LogLevel.TRACE ? '📝' : '';
+        
+        // Only log data for DEBUG and TRACE levels
+        if (data && level >= LogLevel.DEBUG) {
+            // Sanitize and limit data output
+            const sanitizedData = JSON.parse(JSON.stringify(data, (key, value) => {
+                if (Array.isArray(value)) {
+                    if (level < LogLevel.TRACE && value.length > 2) {
+                        return `Array(${value.length})`;
+                    }
+                    return value.slice(0, 5); // Limit array output
+                }
+                if (value && typeof value === 'object') {
+                    const cleaned = {};
+                    // Only include essential properties based on log level
+                    const essentialProps = level >= LogLevel.TRACE ? 
+                        Object.keys(value) : 
+                        ['type', 'success', 'error', 'status'];
+                    for (const k of essentialProps) {
+                        if (k in value) cleaned[k] = value[k];
+                    }
+                    return cleaned;
+                }
+                return value;
+            }));
+            console.log(`${prefix} [${category}] ${message}:`, sanitizedData);
+        } else {
+            console.log(`${prefix} [${category}] ${message}`);
+        }
+    }
+}
+
+// Add helper functions for different log levels
+const logError = (category, message, data) => log(LogLevel.ERROR, category, message, data);
+const logWarn = (category, message, data) => log(LogLevel.WARN, category, message, data);
+const logInfo = (category, message, data) => log(LogLevel.INFO, category, message, data);
+const logDebug = (category, message, data) => log(LogLevel.DEBUG, category, message, data);
+const logTrace = (category, message, data) => log(LogLevel.TRACE, category, message, data);
 
 // Wrap initialization in error handler
 try {
@@ -569,32 +629,58 @@ try {
         // Update provider logo
         updateProviderLogo(currentModel);
         
+        // Get the current input text
+        const text = userInput.value.trim();
+        
         // Check if there's an image and update warning
         if (currentImage) {
-            const modelName = currentModel.replace('local:', '');
-            const isVisionModel = modelName.toLowerCase().includes('vision') || 
-                                modelName.toLowerCase().includes('dream') || 
-                                modelName.toLowerCase().includes('image');
-            
-            warningContainer.style.display = 'inline-flex';
-            if (!isVisionModel) {
+            let provider, modelId;
+            if (currentModel.startsWith('local:')) {
+                provider = 'local';
+                modelId = currentModel.substring(6);
+            } else {
+                [provider, modelId] = currentModel.split(':');
+            }
+
+            let capabilities;
+            try {
+                if (provider === 'local') {
+                    capabilities = await LocalModelService.getModelCapabilities(modelId);
+                } else {
+                    capabilities = await ExternalModelService.getModelCapabilities(provider, modelId);
+                }
+                
+                warningContainer.style.display = 'inline-flex';
+                if (!capabilities.vision) {
+                    warningContainer.innerHTML = `
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        Current model doesn't support images
+                    `;
+                    warningContainer.style.display = 'inline-flex';
+                    inputExplainButton.style.display = 'none'; // Hide explain button
+                } else {
+                    warningContainer.style.display = 'none';
+                    // Show explain button if there's text
+                    inputExplainButton.style.display = text ? 'block' : 'none';
+                }
+            } catch (error) {
+                console.error('Error checking model capabilities:', error);
+                // Default to showing warning if we can't determine capabilities
                 warningContainer.innerHTML = `
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    Current model doesn't support images
+                    Unable to verify image support for current model
                 `;
-                inputExplainButton.style.display = 'none'; // Hide explain button
-            } else {
-                warningContainer.style.display = 'none';
-                // Only show explain button if there's text
-                const text = userInput.value.trim();
-                inputExplainButton.style.display = text ? 'block' : 'none';
+                warningContainer.style.display = 'inline-flex';
+                inputExplainButton.style.display = 'none';
             }
         } else {
+            // No image, just check text for explain button
             warningContainer.style.display = 'none';
-            // Show explain button if there's text
-            const text = userInput.value.trim();
+            explainButtonContainer.style.display = text ? 'block' : 'none';
             inputExplainButton.style.display = text ? 'block' : 'none';
         }
     });
@@ -1274,54 +1360,106 @@ try {
             { left: "$$", right: "$$", display: true },
             { left: "$", right: "$", display: false },
             { left: "\\[", right: "\\]", display: true },
-            { left: "\\(", right: "\\)", display: false }
+            { left: "\\(", right: "\\)", display: false },
+            { left: "\\begin{equation}", right: "\\end{equation}", display: true },
+            { left: "\\begin{align}", right: "\\end{align}", display: true },
+            { left: "\\begin{alignat}", right: "\\end{alignat}", display: true },
+            { left: "\\begin{gather}", right: "\\end{gather}", display: true },
+            { left: "\\begin{CD}", right: "\\end{CD}", display: true },
+            { left: "\\begin{matrix}", right: "\\end{matrix}", display: true },
+            { left: "\\begin{pmatrix}", right: "\\end{pmatrix}", display: true },
+            { left: "\\begin{bmatrix}", right: "\\end{bmatrix}", display: true },
+            { left: "\\begin{cases}", right: "\\end{cases}", display: true }
         ],
         throwOnError: false,
-        output: 'html'
+        errorColor: '#cc0000',
+        strict: false,
+        trust: true,
+        maxSize: 500,
+        maxExpand: 1000,
+        macros: {
+            "\\eqref": "\\href{#1}{}",   // Handle \eqref without errors
+            "\\label": "\\href{#1}{}",    // Handle \label without errors
+            "\\ref": "\\href{#1}{}",      // Handle \ref without errors
+            "\\dots": "\\ldots",          // Common dots notation
+            "\\R": "\\mathbb{R}",         // Common number sets
+            "\\N": "\\mathbb{N}",
+            "\\Z": "\\mathbb{Z}",
+            "\\Q": "\\mathbb{Q}",
+            "\\C": "\\mathbb{C}"
+        }
     };
 
-    // Single function to handle message updates
-    function handleModelResponse(message) {
-        console.log('🎯 Handling model response:', {
-            success: message.success,
-            contentLength: message.response?.length,
-            isDone: message.done,
-            hasError: !!message.error
+    // Add message tracking system
+    const processedMessages = new Set();
+    const MESSAGE_TIMEOUT = 1000; // Clear processed messages after 1 second
+
+    function isMessageProcessed(message) {
+        // Generate a unique key for the message
+        const messageKey = JSON.stringify({
+            type: message.type,
+            response: message.response,
+            timestamp: message.timestamp
         });
+        
+        if (processedMessages.has(messageKey)) {
+            logDebug('MessageDedup', 'Duplicate message detected', { messageKey });
+            return true;
+        }
+        
+        // Add to processed messages and schedule cleanup
+        processedMessages.add(messageKey);
+        setTimeout(() => {
+            processedMessages.delete(messageKey);
+        }, MESSAGE_TIMEOUT);
+        
+        return false;
+    }
+
+    // Update handleModelResponse to use deduplication
+    function handleModelResponse(message) {
+        // Add timestamp if not present
+        if (!message.timestamp) {
+            message.timestamp = Date.now();
+        }
+        
+        // Check for duplicate message
+        if (isMessageProcessed(message)) {
+            logDebug('ModelResponse', 'Skipping duplicate message', message);
+            return;
+        }
+        
+        logDebug('ModelResponse', 'Processing new message', message);
 
         if (!message.success) {
-            console.error('❌ Model response error:', message.error);
+            logError('ModelResponse', 'Model response error', message.error);
             showError(message.error || 'An error occurred while generating the response');
             return;
         }
 
         if (!message.response && !message.error) {
-            console.warn('⚠️ Empty response received');
+            logWarn('ModelResponse', 'Empty response received');
             return;
         }
 
         try {
             const chatContainer = document.getElementById('chat-messages');
             
-            // Track if user has scrolled up
             if (!isUserScrolled) {
                 isUserScrolled = chatContainer.scrollTop + chatContainer.clientHeight < chatContainer.scrollHeight - 10;
             }
 
-            // Create new message if none exists
             if (!currentAssistantMessage) {
-                // First, ensure proper spacing by adding margin to the last message
                 const messages = chatContainer.querySelectorAll('.message');
                 if (messages.length > 0) {
                     const lastMessage = messages[messages.length - 1];
                     lastMessage.style.marginBottom = '16px';
                 }
 
-                console.log('📝 Creating new assistant message');
+                log(LogLevel.DEBUG, 'Creating new assistant message');
                 currentAssistantMessage = addMessage('assistant', '');
                 currentAssistantMessage.dataset.content = '';
                 
-                // Ensure the new message is properly positioned
                 currentAssistantMessage.style.position = 'relative';
                 currentAssistantMessage.style.marginTop = '16px';
                 currentAssistantMessage.style.marginBottom = '16px';
@@ -1383,10 +1521,11 @@ try {
                             scripts[0].parentNode.removeChild(scripts[0]);
                         }
                         
+                        // Update content
                         contentContainer.innerHTML = tempDiv.innerHTML;
 
                         // Render math in the content
-                        if (typeof renderMathInElement !== 'undefined') {
+                        if (typeof renderMathInElement === 'function') {
                             renderMathInElement(contentContainer, katexConfig);
                         }
                     } else {
@@ -1423,7 +1562,7 @@ try {
 
             // Reset scroll tracking when message is complete
             if (message.done) {
-                console.log('✅ Message complete, resetting current message');
+                log(LogLevel.INFO, 'Message complete, resetting state');
                 currentAssistantMessage = null;
                 // Do not reset isUserScrolled here
                 if (scrollTimeout) {
@@ -1438,55 +1577,36 @@ try {
                 }
             }
         } catch (error) {
-            console.error('❌ Error handling model response:', error);
+            logError('ModelResponse', 'Error handling model response', error);
             showError('An error occurred while displaying the response');
         }
     }
 
-    // Handle messages from chrome runtime
+    // Update message listeners to track source
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        console.log('🎯 Received chrome.runtime message:', {
-            type: message?.type,
-            success: message?.success,
-            contentLength: message?.response?.length,
-            isDone: message?.done
-        });
+        logTrace('ChromeMessage', 'Received chrome runtime message', message);
 
-        // Validate message
         if (!message || typeof message !== 'object') {
-            console.warn('⚠️ Invalid message format:', message);
+            logWarn('ChromeMessage', 'Invalid message format', message);
             return true;
         }
 
-        // Handle model response
         if (message.type === 'MODEL_RESPONSE') {
-            console.log('🔄 Processing MODEL_RESPONSE:', {
-                contentLength: message.response?.length,
-                isDone: message.done
-            });
+            message.source = 'chrome';
             handleModelResponse(message);
         }
 
         return true;
     });
 
-    // Handle window messages (from content script)
+    // Update window message listener
     window.addEventListener('message', (event) => {
         const message = event.data;
         
-        console.log('📥 Received window message:', {
-            type: message?.type,
-            success: message?.success,
-            contentLength: message?.response?.length,
-            isDone: message?.done
-        });
+        logTrace('WindowMessage', 'Received window message', message);
 
-        // Handle model response
         if (message?.type === 'MODEL_RESPONSE') {
-            console.log('🔄 Processing window MODEL_RESPONSE:', {
-                contentLength: message.response?.length,
-                isDone: message.done
-            });
+            message.source = 'window';
             handleModelResponse(message);
         }
     });
