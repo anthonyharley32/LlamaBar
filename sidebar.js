@@ -103,11 +103,35 @@ try {
         hasModelSelector: !!modelSelector
     });
 
+    // Add scroll listener to detect when user manually scrolls
+    chatMessages.addEventListener('scroll', (e) => {
+        const chatContainer = e.target;
+        const distanceFromBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight;
+        const buffer = 100; // Add a 100px buffer zone
+        
+        // Consider user at bottom if within buffer zone
+        if (distanceFromBottom > buffer) {
+            isUserScrolled = true;
+        } else {
+            isUserScrolled = false;
+        }
+        
+        logDebug('Scroll', 'User scroll detected', {
+            scrollTop: chatContainer.scrollTop,
+            clientHeight: chatContainer.clientHeight,
+            scrollHeight: chatContainer.scrollHeight,
+            distanceFromBottom,
+            buffer,
+            isUserScrolled
+        });
+    });
+
     let currentAssistantMessage = null;
     let currentModel = 'local:llama3.2:1b';  // Initialize with local: prefix
     let currentImage = null;
     let setupWizardFrame = null;
     let markdownEnabled = true;
+    let isUserScrolled = false;  // Add this declaration
 
     // Initialize markdown toggle
     markdownToggle.addEventListener('change', (e) => {
@@ -1355,7 +1379,6 @@ try {
 
     // Add this at the top with other variables
     let scrollTimeout = null;
-    let isUserScrolled = false;
 
     // Add KaTeX configuration
     const katexConfig = {
@@ -1448,8 +1471,12 @@ try {
         try {
             const chatContainer = document.getElementById('chat-messages');
             
-            if (!isUserScrolled) {
-                isUserScrolled = chatContainer.scrollTop + chatContainer.clientHeight < chatContainer.scrollHeight - 10;
+            // Check if user was already at bottom before this update
+            const wasAtBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 10;
+            
+            // Only update isUserScrolled if they've scrolled up
+            if (wasAtBottom) {
+                isUserScrolled = false;
             }
 
             if (!currentAssistantMessage) {
@@ -1547,35 +1574,25 @@ try {
             currentAssistantMessage.style.display = 'block';
             contentContainer.style.display = 'block';
 
-            // Smooth scroll handling
+            // Force a reflow to ensure scrollHeight is accurate
+            void chatContainer.offsetHeight;
+
+            // Scroll after content update if we're not manually scrolled up
             if (!isUserScrolled) {
-                // Clear any pending scroll timeout
-                if (scrollTimeout) {
-                    clearTimeout(scrollTimeout);
-                }
-                
-                // Debounce the scroll to avoid jank
-                scrollTimeout = setTimeout(() => {
-                    chatContainer.scrollTo({
-                        top: chatContainer.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                }, 100); // Adjust this delay if needed
+                chatContainer.scrollTo({
+                    top: chatContainer.scrollHeight,
+                    behavior: 'instant'  // Use instant instead of smooth for more reliable scrolling
+                });
             }
 
-            // Reset scroll tracking when message is complete
+            // Reset state when message is complete
             if (message.done) {
-                log(LogLevel.INFO, 'Message complete, resetting state');
                 currentAssistantMessage = null;
-                // Do not reset isUserScrolled here
-                if (scrollTimeout) {
-                    clearTimeout(scrollTimeout);
-                }
-                // Only scroll to bottom if user hasn't scrolled up
+                // Final scroll to bottom if we're not manually scrolled up
                 if (!isUserScrolled) {
                     chatContainer.scrollTo({
                         top: chatContainer.scrollHeight,
-                        behavior: 'smooth'
+                        behavior: 'smooth'  // Use smooth only for the final scroll
                     });
                 }
             }
