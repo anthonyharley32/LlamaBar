@@ -1254,88 +1254,34 @@ try {
     }
   }
 
-  // Add message to chat
-  function addMessage(type, content) {
-    const messageDiv = document.createElement("div");
-    messageDiv.className = `message ${type}-message`;
+  // Add this helper function before addMessage
+  function removeSubsequentMessages(messageElement) {
+    let nextElement = messageElement.nextElementSibling;
+    const messagesToRemove = [];
 
-    if (type === "assistant") {
-      // Clear any existing currentAssistantMessage
-      if (currentAssistantMessage) {
-        currentAssistantMessage.style.marginBottom = "16px";
+    // Collect all subsequent messages
+    while (nextElement) {
+      if (nextElement.classList.contains("message")) {
+        messagesToRemove.push(nextElement);
       }
-      currentAssistantMessage = messageDiv;
-    } else {
-      // For user messages, ensure proper spacing
-      if (currentAssistantMessage) {
-        currentAssistantMessage.style.marginBottom = "16px";
-      }
+      nextElement = nextElement.nextElementSibling;
     }
 
-    // Handle markdown formatting if enabled for assistant messages
-    if (
-      type === "assistant" &&
-      markdownEnabled &&
-      typeof marked !== "undefined"
-    ) {
-      try {
-        messageDiv.innerHTML = marked.parse(content);
-      } catch (error) {
-        console.error("Markdown parsing failed:", error);
-        messageDiv.textContent = content;
-      }
-    } else if (type === "user" && content.includes("<img")) {
-      // For user messages with images, use innerHTML but sanitize
+    // Remove the messages
+    messagesToRemove.forEach((msg) => msg.remove());
+  }
+
+  // Modify the addMessage function to accept an insertAfter parameter
+  function addMessage(type, content, insertAfter = null) {
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `message ${type}-message`;
+    let editButton = null;
+
+    // Add content to the message div
+    if (content.includes("<img")) {
+      // Handle content with image
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = content;
-
-      // Only allow specific HTML elements and attributes
-      const allowedTags = ["div", "img"];
-      const allowedAttributes = {
-        img: ["src", "alt"],
-      };
-
-      function sanitizeNode(node) {
-        if (node.nodeType === 3) {
-          // Text node
-          return node.cloneNode(true);
-        }
-
-        if (node.nodeType !== 1) {
-          // Not an element node
-          return null;
-        }
-
-        if (!allowedTags.includes(node.tagName.toLowerCase())) {
-          return document.createTextNode(node.textContent);
-        }
-
-        const newNode = document.createElement(node.tagName);
-
-        // Copy allowed attributes
-        const allowedAttrs =
-          allowedAttributes[node.tagName.toLowerCase()] || [];
-        allowedAttrs.forEach((attr) => {
-          if (node.hasAttribute(attr)) {
-            newNode.setAttribute(attr, node.getAttribute(attr));
-          }
-        });
-
-        // Recursively sanitize child nodes
-        Array.from(node.childNodes).forEach((child) => {
-          const sanitizedChild = sanitizeNode(child);
-          if (sanitizedChild) {
-            newNode.appendChild(sanitizedChild);
-          }
-        });
-
-        return newNode;
-      }
-
-      // Clear the message div
-      messageDiv.innerHTML = "";
-
-      // Add sanitized nodes
       Array.from(tempDiv.childNodes).forEach((node) => {
         const sanitizedNode = sanitizeNode(node);
         if (sanitizedNode) {
@@ -1343,18 +1289,180 @@ try {
         }
       });
     } else {
-      // For regular messages without HTML
+      // Handle text-only content
       messageDiv.textContent = content;
     }
 
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (type === "assistant") {
+      // Clear any existing currentAssistantMessage
+      if (currentAssistantMessage) {
+        currentAssistantMessage.style.marginBottom = "4px"; // Reduced from 16px
+      }
+      currentAssistantMessage = messageDiv;
+    } else {
+      // For user messages, ensure proper spacing and add edit button
+      if (currentAssistantMessage) {
+        currentAssistantMessage.style.marginBottom = "4px"; // Reduced from 16px
+      }
 
+      // Store original content for editing
+      messageDiv.dataset.originalContent = content;
+
+      // Create edit button for user messages
+      editButton = document.createElement("button");
+      editButton.className = "edit-button";
+      editButton.innerHTML = `
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        `;
+
+      // Add edit button click handler
+      editButton.addEventListener("click", () => {
+        // Enter edit mode
+        messageDiv.classList.add("editing");
+
+        // Create edit interface
+        const editContainer = document.createElement("div");
+        editContainer.className = "edit-container";
+
+        const textarea = document.createElement("textarea");
+        textarea.className = "edit-textarea";
+        textarea.value = messageDiv.dataset.originalContent.replace(
+          /<div>(.*?)<\/div>/,
+          "$1"
+        );
+        textarea.rows = 1;
+
+        const controls = document.createElement("div");
+        controls.className = "edit-controls";
+
+        const saveButton = document.createElement("button");
+        saveButton.className = "save-edit";
+        saveButton.textContent = "Send"; // Changed from "Save" to "Send"
+
+        const cancelButton = document.createElement("button");
+        cancelButton.className = "cancel-edit";
+        cancelButton.textContent = "Cancel";
+
+        controls.appendChild(cancelButton);
+        controls.appendChild(saveButton);
+
+        editContainer.appendChild(textarea);
+        editContainer.appendChild(controls);
+
+        // Clear message content and add edit interface
+        messageDiv.innerHTML = "";
+        messageDiv.appendChild(editContainer);
+
+        // Auto-resize textarea
+        const autoResize = () => {
+          textarea.style.height = "auto";
+          textarea.style.height = textarea.scrollHeight + "px";
+        };
+        textarea.addEventListener("input", autoResize);
+        autoResize();
+
+        // Focus textarea
+        textarea.focus();
+
+        // Handle save
+        saveButton.addEventListener("click", () => {
+          const newText = textarea.value.trim();
+          if (newText) {
+            // Update message content
+            let newContent = newText;
+            if (messageDiv.dataset.originalContent.includes("<img")) {
+              // Preserve image if it exists
+              newContent = `<div>${newText}</div>${
+                messageDiv.dataset.originalContent.match(/<img.*?>/)[0]
+              }`;
+            }
+            messageDiv.dataset.originalContent = newContent;
+
+            // Exit edit mode and update display
+            messageDiv.classList.remove("editing");
+            messageDiv.innerHTML = "";
+
+            if (newContent.includes("<img")) {
+              // Handle content with image
+              const tempDiv = document.createElement("div");
+              tempDiv.innerHTML = newContent;
+              Array.from(tempDiv.childNodes).forEach((node) => {
+                const sanitizedNode = sanitizeNode(node);
+                if (sanitizedNode) {
+                  messageDiv.appendChild(sanitizedNode);
+                }
+              });
+            } else {
+              // Handle text-only content
+              messageDiv.textContent = newContent;
+            }
+
+            // Add back the edit button
+            messageDiv.appendChild(editButton);
+
+            // Remove all subsequent messages
+            removeSubsequentMessages(messageDiv);
+
+            // Reset currentAssistantMessage
+            currentAssistantMessage = null;
+
+            // Generate new response with the edited text
+            const systemPrompt = `${newText}`;
+            chrome.runtime.sendMessage({
+              type: "QUERY_OLLAMA",
+              prompt: systemPrompt,
+              model: currentModel,
+            });
+          }
+        });
+
+        // Handle cancel
+        cancelButton.addEventListener("click", () => {
+          // Exit edit mode and restore original content
+          messageDiv.classList.remove("editing");
+          messageDiv.innerHTML = "";
+
+          if (messageDiv.dataset.originalContent.includes("<img")) {
+            // Handle content with image
+            const tempDiv = document.createElement("div");
+            tempDiv.innerHTML = messageDiv.dataset.originalContent;
+            Array.from(tempDiv.childNodes).forEach((node) => {
+              const sanitizedNode = sanitizeNode(node);
+              if (sanitizedNode) {
+                messageDiv.appendChild(sanitizedNode);
+              }
+            });
+          } else {
+            // Handle text-only content
+            messageDiv.textContent = messageDiv.dataset.originalContent;
+          }
+
+          // Add back the edit button
+          messageDiv.appendChild(editButton);
+        });
+      });
+
+      messageDiv.appendChild(editButton);
+    }
+
+    // Modified message insertion logic
+    if (insertAfter) {
+      // Insert after the specified message
+      insertAfter.parentNode.insertBefore(messageDiv, insertAfter.nextSibling);
+    } else {
+      // Default behavior: append to chat container
+      chatMessages.appendChild(messageDiv);
+    }
+
+    chatMessages.scrollTop = chatMessages.scrollHeight;
     return messageDiv;
   }
 
-  // Handle user input
-  async function handleUserInput(text) {
+  // Modify handleUserInput to accept an insertAfter parameter
+  async function handleUserInput(text, insertAfter = null) {
     // Create message content
     let messageContent = text;
     if (currentImage) {
@@ -1363,10 +1471,15 @@ try {
     }
 
     // Add user message to chat
-    addMessage("user", messageContent);
+    const userMessage = insertAfter
+      ? addMessage("user", messageContent, insertAfter)
+      : addMessage("user", messageContent);
 
     // Create a new assistant message div that will be updated with streaming content
-    currentAssistantMessage = addMessage("assistant", "");
+    currentAssistantMessage = addMessage("assistant", "", userMessage);
+
+    // Rest of the existing handleUserInput function code...
+    // [Keep all the existing code for handling the prompt, images, etc.]
 
     // Check if current model supports vision
     const modelName = currentModel.replace("local:", "");
@@ -1596,7 +1709,7 @@ try {
         const messages = chatContainer.querySelectorAll(".message");
         if (messages.length > 0) {
           const lastMessage = messages[messages.length - 1];
-          lastMessage.style.marginBottom = "16px";
+          lastMessage.style.marginBottom = "4px"; // Changed from 16px
         }
 
         log(LogLevel.DEBUG, "Creating new assistant message");
@@ -1604,8 +1717,8 @@ try {
         currentAssistantMessage.dataset.content = "";
 
         currentAssistantMessage.style.position = "relative";
-        currentAssistantMessage.style.marginTop = "16px";
-        currentAssistantMessage.style.marginBottom = "16px";
+        currentAssistantMessage.style.marginTop = "4px"; // Changed from 16px
+        currentAssistantMessage.style.marginBottom = "4px"; // Changed from 16px
 
         if (!currentAssistantMessage) {
           throw new Error("Failed to create assistant message element");
@@ -1651,24 +1764,44 @@ try {
           if (shouldParseMarkdown) {
             // Configure marked for streaming
             marked.setOptions({
-              breaks: true,
+              breaks: false, // Prevent automatic line breaks
               gfm: true,
               headerIds: false,
               mangle: false,
+              smartLists: true, // Better list rendering
+              xhtml: false, // Prevent self-closing tags that can cause extra space
+              listItemIndent: "tab", // Use tab indentation for list items
             });
 
-            // Parse markdown
-            const parsedContent = marked.parse(newContent);
+            // Parse markdown and clean up extra whitespace
+            let parsedContent = marked
+              .parse(newContent)
+              .replace(/\n\s*\n/g, "\n") // Remove multiple blank lines
+              .replace(/\n+$/, "") // Remove trailing newlines
+              .replace(/<\/li>\s+<li>/g, "</li><li>") // Remove space between list items
+              .replace(/<\/(ul|ol)>\s+<(ul|ol)>/g, "</$1><$2>") // Remove space between lists
+              .trim();
 
             // Create a temporary div to sanitize HTML
             const tempDiv = document.createElement("div");
             tempDiv.innerHTML = parsedContent;
 
-            // Remove any script tags for security
-            const scripts = tempDiv.getElementsByTagName("script");
-            while (scripts[0]) {
-              scripts[0].parentNode.removeChild(scripts[0]);
-            }
+            // Remove any empty paragraphs that might add extra space
+            tempDiv.querySelectorAll("p").forEach((p) => {
+              if (!p.textContent.trim()) {
+                p.remove();
+              }
+            });
+
+            // Clean up extra spacing in lists
+            tempDiv.querySelectorAll("ul, ol").forEach((list) => {
+              // Remove any direct text nodes between li elements
+              Array.from(list.childNodes).forEach((node) => {
+                if (node.nodeType === 3 && node.textContent.trim() === "") {
+                  node.remove();
+                }
+              });
+            });
 
             // Update content
             contentContainer.innerHTML = tempDiv.innerHTML;
