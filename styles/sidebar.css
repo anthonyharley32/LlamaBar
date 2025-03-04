@@ -353,6 +353,8 @@ input:checked + .slider:before {
 /* Markdown Styles */
 .content-container {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    margin: 0;
+    padding: 0;
 }
 
 .content-container h1,
@@ -402,7 +404,7 @@ input:checked + .slider:before {
 .content-container h6 { font-size: 1em; }
 
 .content-container p {
-    margin: 0.4em 0;
+    margin: 0;
     line-height: 1.4;
 }
 
@@ -441,45 +443,40 @@ input:checked + .slider:before {
 
 .content-container ul,
 .content-container ol {
-    margin: 0.4em 0;
-    padding-left: 1.5em;
+    margin: 0;
+    padding: 0 0 0 1.2em;
+    list-style-position: outside;
 }
 
 .content-container li {
     margin: 0;
-    line-height: 1.4;
+    padding: 0;
+    display: list-item;
+    position: relative;
 }
 
-/* Remove extra margins from paragraphs inside list items */
-.content-container li p {
+/* Remove custom bullets since we're using native ones */
+.content-container ul {
+    list-style-type: disc;
+}
+
+.content-container li > p {
     margin: 0;
+    padding: 0;
+    display: inline;
 }
 
-/* Adjust spacing for headers in lists */
-.content-container li h1,
-.content-container li h2,
-.content-container li h3,
-.content-container li h4,
-.content-container li h5,
-.content-container li h6 {
-    margin-top: 0.4em;
-    margin-bottom: 0.2em;
-}
-
-/* Keep normal paragraph spacing outside of lists */
-.content-container > p {
-    margin: 0.4em 0;
-    line-height: 1.4;
-}
-
-/* Ensure proper spacing between list items with multiple paragraphs */
+/* Ensure proper spacing between list items */
 .content-container li + li {
-    margin-top: 0.2em;
+    margin-top: 0.1em;
 }
 
-/* Add spacing between different types of content in list items */
-.content-container li > * + * {
-    margin-top: 0.2em;
+/* Ensure proper nesting for nested lists */
+.content-container li > ul,
+.content-container li > ol {
+    margin-top: 0.1em;
+    margin-bottom: 0.1em;
+    padding-left: 1.2em;
 }
 
 .content-container blockquote {
