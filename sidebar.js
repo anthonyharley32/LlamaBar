@@ -20,6 +20,55 @@ const logoMap = {
   grok: "grok.webp",
 };
 
+let isUserScrolled = false; // Add scroll tracking
+
+// Function to safely sanitize DOM nodes
+function sanitizeNode(node) {
+  // Handle text nodes
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.cloneNode(true);
+  }
+
+  // Handle element nodes
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    // Only allow specific HTML elements
+    if (
+      node.nodeName === "DIV" ||
+      node.nodeName === "P" ||
+      node.nodeName === "IMG"
+    ) {
+      const sanitizedNode = node.cloneNode(false);
+
+      // For images, only copy specific attributes
+      if (node.nodeName === "IMG") {
+        const allowedAttributes = ["src", "alt"];
+        allowedAttributes.forEach((attr) => {
+          if (node.hasAttribute(attr)) {
+            sanitizedNode.setAttribute(attr, node.getAttribute(attr));
+          }
+        });
+        // Ensure proper styling
+        sanitizedNode.style.maxWidth = "200px";
+        sanitizedNode.style.borderRadius = "8px";
+        sanitizedNode.style.margin = "8px 0";
+      }
+
+      // Recursively sanitize child nodes
+      Array.from(node.childNodes).forEach((child) => {
+        const sanitizedChild = sanitizeNode(child);
+        if (sanitizedChild) {
+          sanitizedNode.appendChild(sanitizedChild);
+        }
+      });
+
+      return sanitizedNode;
+    }
+  }
+
+  // Ignore other node types
+  return null;
+}
+
 // Add log level system at the top after imports
 const LogLevel = {
   ERROR: 0,
@@ -119,6 +168,23 @@ try {
     hasUserInput: !!userInput,
     hasSendButton: !!sendButton,
     hasModelSelector: !!modelSelector,
+  });
+
+  // Add scroll listener to detect when user manually scrolls
+  chatMessages.addEventListener("scroll", (e) => {
+    const chatContainer = e.target;
+    const distanceFromBottom =
+      chatContainer.scrollHeight -
+      chatContainer.scrollTop -
+      chatContainer.clientHeight;
+    const buffer = 100; // Add a 100px buffer zone
+
+    // Consider user at bottom if within buffer zone
+    if (distanceFromBottom > buffer) {
+      isUserScrolled = true;
+    } else {
+      isUserScrolled = false;
+    }
   });
 
   let currentAssistantMessage = null;
@@ -1329,18 +1395,52 @@ try {
 
         const textarea = document.createElement("textarea");
         textarea.className = "edit-textarea";
-        textarea.value = messageDiv.dataset.originalContent.replace(
-          /<div>(.*?)<\/div>/,
-          "$1"
-        );
+
+        // Extract text content and image separately
+        let textContent = messageDiv.dataset.originalContent;
+        let imageMatch = textContent.match(/<img.*?src="(.*?)".*?>/);
+        let imageUrl = null;
+
+        if (imageMatch) {
+          imageUrl = imageMatch[1];
+          // Remove the image HTML from text content
+          textContent = textContent
+            .replace(/<div>(.*?)<\/div>/, "$1")
+            .replace(/<img.*?>/, "")
+            .trim();
+        } else {
+          textContent = textContent.replace(/<div>(.*?)<\/div>/, "$1").trim();
+        }
+
+        textarea.value = textContent;
         textarea.rows = 1;
+
+        const imagePreviewContainer = document.createElement("div");
+        imagePreviewContainer.className = "edit-image-preview";
+
+        if (imageUrl) {
+          imagePreviewContainer.innerHTML = `
+            <div class="edit-image-wrapper">
+              <img src="${imageUrl}" alt="Message image">
+              <button class="remove-edit-image" title="Remove image">×</button>
+            </div>
+          `;
+
+          // Add click handler for image removal
+          const removeImageBtn =
+            imagePreviewContainer.querySelector(".remove-edit-image");
+          removeImageBtn.addEventListener("click", () => {
+            imageUrl = null;
+            imagePreviewContainer.innerHTML = "";
+          });
+        }
 
         const controls = document.createElement("div");
         controls.className = "edit-controls";
 
         const saveButton = document.createElement("button");
         saveButton.className = "save-edit";
-        saveButton.textContent = "Send"; // Changed from "Save" to "Send"
+        saveButton.textContent = "Send";
 
         const cancelButton = document.createElement("button");
         cancelButton.className = "cancel-edit";
@@ -1350,6 +1450,7 @@ try {
         controls.appendChild(saveButton);
 
         editContainer.appendChild(textarea);
+        editContainer.appendChild(imagePreviewContainer);
         editContainer.appendChild(controls);
 
         // Clear message content and add edit interface
@@ -1370,14 +1471,11 @@ try {
         // Handle save
         saveButton.addEventListener("click", () => {
           const newText = textarea.value.trim();
-          if (newText) {
+          if (newText || imageUrl) {
             // Update message content
             let newContent = newText;
-            if (messageDiv.dataset.originalContent.includes("<img")) {
-              // Preserve image if it exists
-              newContent = `<div>${newText}</div>${
-                messageDiv.dataset.originalContent.match(/<img.*?>/)[0]
-              }`;
+            if (imageUrl) {
+              newContent = `<div>${newText}</div><img src="${imageUrl}" alt="User uploaded image">`;
             }
             messageDiv.dataset.originalContent = newContent;
 
@@ -1460,6 +1558,48 @@ try {
     chatMessages.scrollTop = chatMessages.scrollHeight;
     return messageDiv;
   }
+
+  // Add styles for edit image preview
+  const editImageStyles = document.createElement("style");
+  editImageStyles.textContent = `
+    .edit-image-preview {
+      margin: 8px 0;
+    }
+
+    .edit-image-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+
+    .edit-image-wrapper img {
+      max-width: 200px;
+      border-radius: 8px;
+      display: block;
+    }
+
+    .remove-edit-image {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.5);
+      color: white;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      transition: background-color 0.2s;
+    }
+
+    .remove-edit-image:hover {
+      background: rgba(0, 0, 0, 0.7);
+    }
+  `;
+  document.head.appendChild(editImageStyles);
 
   // Modify handleUserInput to accept an insertAfter parameter
   async function handleUserInput(text, insertAfter = null) {
@@ -1604,7 +1744,6 @@ try {
 
   // Add this at the top with other variables
   let scrollTimeout = null;
-  let isUserScrolled = false;
 
   // Add KaTeX configuration
   const katexConfig = {
@@ -1828,33 +1967,25 @@ try {
 
       // Smooth scroll handling
       if (!isUserScrolled) {
-        // Clear any pending scroll timeout
-        if (scrollTimeout) {
-          clearTimeout(scrollTimeout);
-        }
+        // Force a reflow to ensure scrollHeight is accurate
+        void chatContainer.offsetHeight;
 
-        // Debounce the scroll to avoid jank
-        scrollTimeout = setTimeout(() => {
-          chatContainer.scrollTo({
-            top: chatContainer.scrollHeight,
-            behavior: "smooth",
-          });
-        }, 100); // Adjust this delay if needed
+        chatContainer.scrollTo({
+          top: chatContainer.scrollHeight,
+          behavior: "instant", // Use instant instead of smooth for more reliable scrolling
+        });
       }
 
-      // Reset scroll tracking when message is complete
+      // Reset state when message is complete
       if (message.done) {
         log(LogLevel.INFO, "Message complete, resetting state");
         currentAssistantMessage = null;
-        // Do not reset isUserScrolled here
-        if (scrollTimeout) {
-          clearTimeout(scrollTimeout);
-        }
-        // Only scroll to bottom if user hasn't scrolled up
+
+        // Final scroll to bottom if we're not manually scrolled up
         if (!isUserScrolled) {
           chatContainer.scrollTo({
             top: chatContainer.scrollHeight,
-            behavior: "smooth",
+            behavior: "smooth", // Use smooth only for the final scroll
           });
         }
       }
