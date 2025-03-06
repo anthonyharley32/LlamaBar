@@ -1,6 +1,8 @@
 const OLLAMA_API = 'http://localhost:11434';
 
 export class LocalModelService {
+    static abortController = null;
+
     static async checkServerStatus() {
         try {
             const response = await fetch(`${OLLAMA_API}/api/version`);
@@ -117,8 +119,10 @@ export class LocalModelService {
     }
 
     static async generateResponse(prompt, model, options = {}) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        // Create new AbortController for this request
+        this.abortController = new AbortController();
+        const signal = this.abortController.signal;
+        const timeoutId = setTimeout(() => this.abortController.abort(), 30000);
 
         try {
             // Verify server is running
@@ -142,20 +146,47 @@ export class LocalModelService {
                 promptLength: prompt.length
             });
 
+            // Add signal event listener for cleanup
+            signal.addEventListener('abort', () => {
+                if (options.onCancel) {
+                    options.onCancel();
+                }
+            });
+
             if (capabilities.vision && hasImageInput) {
-                return this.handleVisionRequest(prompt, model);
+                return this.handleVisionRequest(prompt, model, { ...options, signal });
             } else {
-                return this.handleTextRequest(prompt, model, options);
+                return this.handleTextRequest(prompt, model, { ...options, signal });
             }
         } catch (error) {
             console.error('Generation error:', error);
+            // Check if this was an abort error
+            if (error.name === 'AbortError') {
+                throw new Error('Generation stopped by user');
+            }
             throw error;
         } finally {
             clearTimeout(timeoutId);
+            // Ensure AbortController is cleaned up
+            if (this.abortController?.signal.aborted) {
+                this.abortController = null;
+            }
         }
     }
 
-    static async handleVisionRequest(prompt, model) {
+    static stopGeneration() {
+        if (this.abortController) {
+            try {
+                this.abortController.abort();
+            } catch (error) {
+                console.error('Error aborting generation:', error);
+            } finally {
+                this.abortController = null;
+            }
+        }
+    }
+
+    static async handleVisionRequest(prompt, model, options = {}) {
         const imageMatch = prompt.match(/<image>(.*?)<\/image>/s);
         const base64Image = imageMatch ? imageMatch[1] : null;
         const textPrompt = prompt.replace(/<image>.*?<\/image>/s, '').trim();
@@ -185,7 +216,8 @@ export class LocalModelService {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify(requestBody),
+            signal: options.signal
         });
 
         if (!response.ok) {
@@ -224,7 +256,8 @@ export class LocalModelService {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify(requestBody),
+            signal: options.signal
         });
 
         if (!response.ok) {
@@ -265,24 +298,15 @@ export class LocalModelService {
                                 response: accumulatedContent,
                                 done: data.done
                             };
+
+                            if (data.done) {
+                                return;
+                            }
                         }
                     } catch (e) {
                         console.error('Error parsing response chunk:', e);
                     }
                 }
-            }
-
-            // Send final completion message if we have content
-            if (accumulatedContent) {
-                yield {
-                    type: 'MODEL_RESPONSE',
-                    success: true,
-                    delta: {
-                        content: ''
-                    },
-                    response: accumulatedContent,
-                    done: true
-                };
             }
         } finally {
             reader.releaseLock();

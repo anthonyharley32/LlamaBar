@@ -2,7 +2,13 @@ import { ApiKeyManager } from '../utils/api-key-manager.js';
 
 
 export class ExternalModelService {
+    static abortController = null;
+
     static async generateResponse(provider, modelId, prompt, options = {}) {
+        // Create new AbortController for this request
+        this.abortController = new AbortController();
+        const signal = this.abortController.signal;
+
         const handler = this.getProviderHandler(provider);
         if (!handler) {
             throw new Error(`Unsupported provider: ${provider}`);
@@ -17,7 +23,41 @@ export class ExternalModelService {
             throw new Error(`Model ${modelId} does not support image input. Please use a vision-capable model.`);
         }
 
-        return handler(modelId, prompt, { ...options, capabilities });
+        // Add signal event listener for cleanup
+        signal.addEventListener('abort', () => {
+            if (options.onCancel) {
+                options.onCancel();
+            }
+        });
+
+        try {
+            console.log(`Starting ${provider} request for model ${modelId}`);
+            const response = await handler(modelId, prompt, { ...options, signal, capabilities });
+            return response;
+        } catch (error) {
+            // Check if this was an abort error
+            if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+                throw new Error('Generation stopped by user');
+            }
+            throw error;
+        } finally {
+            // Clean up the AbortController if it was aborted
+            if (this.abortController?.signal.aborted) {
+                this.abortController = null;
+            }
+        }
+    }
+
+    static stopGeneration() {
+        if (this.abortController) {
+            try {
+                this.abortController.abort();
+            } catch (error) {
+                console.error('Error aborting generation:', error);
+            } finally {
+                this.abortController = null;
+            }
+        }
     }
 
     static getProviderHandler(provider) {
@@ -87,7 +127,8 @@ export class ExternalModelService {
                     'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify(requestBody),
+                signal: options.signal
             });
 
             console.log('📨 Received response from OpenAI:', {
@@ -255,7 +296,8 @@ export class ExternalModelService {
                     'content-type': 'application/json',
                     'anthropic-dangerous-direct-browser-access': 'true'
                 },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify(requestBody),
+                signal: options.signal
             });
 
             console.log('📨 Received response from Anthropic:', {
@@ -281,6 +323,10 @@ export class ExternalModelService {
             });
         } catch (error) {
             console.error('💥 Error in handleAnthropic:', error);
+            // Check if this was an abort error
+            if (error.name === 'AbortError' || error.message?.includes('abort')) {
+                throw new Error('Generation stopped by user');
+            }
             throw error;
         }
     }
@@ -289,52 +335,24 @@ export class ExternalModelService {
     static async *handleProviderStream(response, provider, contentExtractor) {
         console.log(`🌊 Starting ${provider} stream handler`);
         const reader = response.body.getReader();
-        console.log('📖 Stream reader created');
         const decoder = new TextDecoder();
         let buffer = '';
         let accumulatedContent = '';
-        let chunkCounter = 0;
 
         try {
-            console.log('🔄 Entering stream processing loop');
             while (true) {
-                console.log(`⏳ Reading chunk #${++chunkCounter}`);
                 const { value, done } = await reader.read();
-                
-                if (done) {
-                    console.log(`✅ ${provider} stream complete after ${chunkCounter} chunks`);
-                    // Yield final accumulated content if any
-                    if (accumulatedContent) {
-                        yield {
-                            type: 'MODEL_RESPONSE',
-                            success: true,
-                            delta: { content: '' },
-                            response: accumulatedContent,
-                            done: true
-                        };
-                    }
-                    break;
-                }
+                if (done) break;
 
                 const chunk = decoder.decode(value, { stream: true });
-                console.log(`📦 Raw ${provider} chunk #${chunkCounter}:`, {
-                    length: chunk.length,
-                    preview: chunk.slice(0, 100)
-                });
-
                 buffer += chunk;
                 const lines = buffer.split('\n');
                 buffer = lines.pop() || '';
 
-                console.log(`📝 Processing ${lines.length} lines from chunk`);
                 for (const line of lines) {
-                    if (!line.trim()) {
-                        console.log('⏭️ Skipping empty line');
-                        continue;
-                    }
+                    if (!line.trim()) continue;
+
                     if (line === 'data: [DONE]') {
-                        console.log('🏁 Stream done marker received');
-                        // Yield final state
                         yield {
                             type: 'MODEL_RESPONSE',
                             success: true,
@@ -342,67 +360,54 @@ export class ExternalModelService {
                             response: accumulatedContent,
                             done: true
                         };
-                        continue;
+                        return;
                     }
-                    
+
                     try {
                         const cleanLine = line.replace(/^data: /, '');
-                        console.log(`🔍 Processing line:`, cleanLine);
-                        
-                        let json;
-                        try {
-                            json = JSON.parse(cleanLine);
-                        } catch (e) {
-                            console.warn(`⚠️ Failed to parse JSON, skipping line:`, e);
-                            continue;  // Skip this line but continue processing
-                        }
-                        
+                        const json = JSON.parse(cleanLine);
                         const content = contentExtractor(json);
-                        console.log(`📄 Extracted content:`, { content });
-                        
+
                         if (content) {
                             accumulatedContent += content;
-                            console.log(`📬 Yielding content:`, {
-                                newContent: content,
-                                totalLength: accumulatedContent.length
-                            });
-                            
                             yield {
                                 type: 'MODEL_RESPONSE',
                                 success: true,
                                 delta: { content },
                                 response: accumulatedContent,
-                                contentLength: accumulatedContent.length,
                                 done: false
                             };
                         }
                     } catch (e) {
-                        console.warn(`⚠️ Error processing line:`, {
-                            error: e,
-                            line: line
-                        });
-                        // Continue processing instead of throwing
+                        console.warn(`Error processing line:`, e);
                         continue;
                     }
                 }
             }
         } catch (error) {
-            console.error(`❌ Fatal error in stream handler:`, error);
-            // Yield error state if we have content
-            if (accumulatedContent) {
+            console.error('Stream error:', error);
+            if (error.name === 'AbortError' || error.message?.includes('abort')) {
+                console.log('Stream aborted by user');
                 yield {
                     type: 'MODEL_RESPONSE',
                     success: true,
                     delta: { content: '' },
                     response: accumulatedContent,
                     done: true,
-                    error: error.message
+                    error: 'Generation stopped by user'
                 };
+            } else {
+                throw error;
             }
-            throw error;
         } finally {
-            console.log('🔒 Releasing stream reader');
-            reader.releaseLock();
+            try {
+                reader.releaseLock();
+                if (!response.bodyUsed) {
+                    await response.body?.cancel();
+                }
+            } catch (error) {
+                console.error('Error cleaning up stream:', error);
+            }
         }
     }
 

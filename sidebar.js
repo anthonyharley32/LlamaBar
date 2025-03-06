@@ -20,6 +20,97 @@ const logoMap = {
     'grok': 'grok.webp'
 };
 
+let isGenerating = false;
+let currentMessageElement = null;
+const stopButton = document.getElementById('stop-generation');
+const chatContainer = document.getElementById('chat-messages');
+
+function handleModelResponse(message) {
+    try {
+        if (!message.success) {
+            hideStopButton();
+            showError(message.error || 'An error occurred');
+            return;
+        }
+
+        // Create or update message element
+        if (!currentMessageElement) {
+            currentMessageElement = document.createElement('div');
+            currentMessageElement.className = 'message assistant-message';
+            currentMessageElement.innerHTML = `<div class="content-container"></div>`;
+            chatContainer.appendChild(currentMessageElement);
+        }
+
+        const contentContainer = currentMessageElement.querySelector('.content-container');
+        if (message.delta?.content) {
+            contentContainer.textContent += message.delta.content;
+        }
+
+        // Handle stream completion
+        if (message.done) {
+            currentMessageElement = null;
+            hideStopButton();
+        }
+
+        // Scroll to bottom
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    } catch (error) {
+        console.error('Error handling model response:', error);
+        hideStopButton();
+        showError('Error displaying response');
+    }
+}
+
+// Add event listener for stop button
+stopButton.addEventListener('click', () => {
+    if (!isGenerating) return;
+    
+    // Send stop message to background script
+    chrome.runtime.sendMessage({ type: 'STOP_GENERATION' });
+    hideStopButton();
+});
+
+function showStopButton() {
+    stopButton.style.display = 'flex';
+    isGenerating = true;
+}
+
+function hideStopButton() {
+    stopButton.style.display = 'none';
+    isGenerating = false;
+}
+
+// Update message handling to show/hide stop button
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'MODEL_RESPONSE') {
+        try {
+            if (!message.success) {
+                showError(message.error || 'An error occurred');
+                hideStopButton();
+                return;
+            }
+
+            if (!isGenerating && !message.done) {
+                showStopButton();
+            }
+
+            handleModelResponse(message);
+
+            if (message.done || message.error) {
+                hideStopButton();
+            }
+        } catch (error) {
+            console.error('Error processing message:', error);
+            hideStopButton();
+            showError('Error processing response');
+        }
+    }
+    if (sendResponse) {
+        sendResponse({}); // Always respond to keep the channel alive
+    }
+    return false; // Don't keep the channel open
+});
+
 // Add log level system at the top after imports
 const LogLevel = {
     ERROR: 0,
